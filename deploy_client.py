@@ -4,6 +4,7 @@
 OpenClaw 自动部署客户端
 编译成二进制后分发给客户
 激活码在线验证
+配置文件外置，支持实时更新
 """
 
 import sys
@@ -13,13 +14,59 @@ import requests
 import platform
 import hashlib
 import uuid
+import json
 from datetime import datetime
 
-# ============= 配置区域 =============
-VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
-DEPLOY_SCRIPT_URL = "https://你的域名.com/deploy.sh"
-VERSION = "1.0.0"
+# ============= 默认配置 =============
+DEFAULT_CONFIG = {
+    "verify_server": "http://180.76.100.92:5000/api/verify",
+    "deploy_script_url": "https://你的域名.com/deploy.sh",
+    "version": "1.0.0"
+}
 # ===================================
+
+
+def get_config_path():
+    """获取配置文件路径（和 exe 同目录）"""
+    if getattr(sys, 'frozen', False):
+        # 打包后的 exe
+        exe_dir = os.path.dirname(sys.executable)
+    else:
+        # 开发模式
+        exe_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(exe_dir, "config.json")
+
+
+def load_config():
+    """加载配置文件"""
+    config_path = get_config_path()
+    
+    # 如果配置文件存在，读取它
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                print(f"✅ 已加载配置文件：{config_path}")
+                return config
+        except Exception as e:
+            print(f"⚠️ 配置文件读取失败，使用默认配置：{e}")
+    
+    # 配置文件不存在，创建默认配置
+    try:
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
+            print(f"✅ 已创建默认配置文件：{config_path}")
+    except:
+        pass
+    
+    return DEFAULT_CONFIG
+
+
+# 加载配置
+CONFIG = load_config()
+VERIFY_SERVER = CONFIG.get("verify_server", DEFAULT_CONFIG["verify_server"])
+DEPLOY_SCRIPT_URL = CONFIG.get("deploy_script_url", DEFAULT_CONFIG["deploy_script_url"])
+VERSION = CONFIG.get("version", DEFAULT_CONFIG["version"])
 
 
 def get_machine_id():

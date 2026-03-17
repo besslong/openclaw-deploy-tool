@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 
 # ============= 配置区域 =============
-VERIFY_SERVER = "https://你的域名.com/api/verify"
+VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEPLOY_SCRIPT_URL = "https://你的域名.com/deploy.sh"
 VERSION = "1.0.0"
 # ===================================

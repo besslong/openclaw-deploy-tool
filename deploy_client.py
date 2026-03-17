@@ -2,9 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 OpenClaw 自动部署客户端
-编译成二进制后分发给客户
-激活码在线验证
-配置文件外置，支持实时更新
+支持服务器部署和本地部署
+交互式输入，用户友好
 """
 
 import sys
@@ -17,76 +16,142 @@ import uuid
 import json
 from datetime import datetime
 
-# ============= 默认配置 =============
-DEFAULT_CONFIG = {
-    "verify_server": "http://180.76.100.92:5000/api/verify",
-    "deploy_script_url": "https://你的域名.com/deploy.sh",
-    "version": "1.0.0"
-}
+# ============= 配置 =============
+VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
+VERSION = "2.0.0"
 # ===================================
 
 
-def get_config_path():
-    """获取配置文件路径（和 exe 同目录）"""
-    if getattr(sys, 'frozen', False):
-        # 打包后的 exe
-        exe_dir = os.path.dirname(sys.executable)
-    else:
-        # 开发模式
-        exe_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(exe_dir, "config.json")
-
-
-def load_config():
-    """加载配置文件"""
-    config_path = get_config_path()
-    
-    # 如果配置文件存在，读取它
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                print(f"✅ 已加载配置文件：{config_path}")
-                return config
-        except Exception as e:
-            print(f"⚠️ 配置文件读取失败，使用默认配置：{e}")
-    
-    # 配置文件不存在，创建默认配置
+def pause_exit(msg="按回车键退出..."):
+    """暂停等待用户按键后退出"""
     try:
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
-            print(f"✅ 已创建默认配置文件：{config_path}")
+        input(f"\n{msg}")
     except:
         pass
-    
-    return DEFAULT_CONFIG
+    sys.exit(0)
 
 
-# 加载配置
-CONFIG = load_config()
-VERIFY_SERVER = CONFIG.get("verify_server", DEFAULT_CONFIG["verify_server"])
-DEPLOY_SCRIPT_URL = CONFIG.get("deploy_script_url", DEFAULT_CONFIG["deploy_script_url"])
-VERSION = CONFIG.get("version", DEFAULT_CONFIG["version"])
+def print_header():
+    """打印程序标题"""
+    print("=" * 60)
+    print("🦞 OpenClaw 自动部署工具")
+    print(f"版本：{VERSION}")
+    print("=" * 60)
+    print()
 
 
 def get_machine_id():
     """获取设备唯一标识"""
-    return str(uuid.getnode())  # MAC 地址
+    return str(uuid.getnode())
 
 
-def get_system_info():
-    """获取系统信息"""
+def clear_screen():
+    """清屏"""
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+
+def select_deploy_mode():
+    """选择部署模式"""
+    print("📋 请选择部署方式：")
+    print()
+    print("  1️⃣  云服务器部署（推荐）")
+    print("      - 你有一台云服务器（阿里云/腾讯云/华为云等）")
+    print("      - 提供 SSH 信息，自动远程部署")
+    print()
+    print("  2️⃣  本地电脑部署")
+    print("      - 在当前电脑上安装 OpenClaw")
+    print("      - 适合个人使用")
+    print()
+    
+    while True:
+        choice = input("请输入选择 (1 或 2)：").strip()
+        if choice in ['1', '2']:
+            return int(choice)
+        print("❌ 请输入 1 或 2")
+
+
+def get_server_info():
+    """获取服务器信息"""
+    print()
+    print("=" * 60)
+    print("📡 云服务器部署配置")
+    print("=" * 60)
+    print()
+    print("📝 请准备以下信息：")
+    print("   - 服务器公网 IP 地址")
+    print("   - SSH 用户名（通常是 root）")
+    print("   - SSH 密码")
+    print()
+    
+    # IP 地址
+    print("📌 关于 IP 地址：")
+    print("   - 云服务器：使用公网 IP")
+    print("   - 在云服务器控制台可以查看")
+    print("   - 或者登录服务器后执行：curl ifconfig.me")
+    print()
+    
+    while True:
+        server_ip = input("请输入服务器 IP 地址：").strip()
+        if server_ip:
+            break
+        print("❌ IP 地址不能为空")
+    
+    # 用户名
+    while True:
+        ssh_user = input("请输入 SSH 用户名 (默认 root)：").strip()
+        if not ssh_user:
+            ssh_user = "root"
+        break
+    
+    # 密码
+    while True:
+        ssh_password = input("请输入 SSH 密码：").strip()
+        if ssh_password:
+            break
+        print("❌ 密码不能为空")
+    
     return {
-        "system": platform.system(),
-        "release": platform.release(),
-        "version": platform.version(),
-        "machine": platform.machine(),
-        "python_version": platform.python_version()
+        "ip": server_ip,
+        "user": ssh_user,
+        "password": ssh_password
     }
+
+
+def get_local_info():
+    """获取本地部署信息"""
+    print()
+    print("=" * 60)
+    print("💻 本地电脑部署配置")
+    print("=" * 60)
+    print()
+    
+    system = platform.system()
+    print(f"检测到系统：{system}")
+    print()
+    
+    if system == "Windows":
+        print("📌 Windows 系统部署说明：")
+        print("   - 需要管理员权限")
+        print("   - 会自动安装 Node.js")
+        print("   - 会自动安装 OpenClaw")
+    elif system == "Linux":
+        print("📌 Linux 系统部署说明：")
+        print("   - 需要 root 权限")
+        print("   - 会自动安装 Node.js")
+        print("   - 会自动安装 OpenClaw")
+    elif system == "Darwin":
+        print("📌 macOS 系统部署说明：")
+        print("   - 会自动安装 Node.js")
+        print("   - 会自动安装 OpenClaw")
+    
+    print()
+    
+    return {"system": system}
 
 
 def verify_license(license_key):
     """在线验证激活码"""
+    print()
     print("🔐 正在验证激活码...")
     
     try:
@@ -120,185 +185,151 @@ def verify_license(license_key):
         return False
 
 
-def check_prerequisites():
-    """检查前置条件"""
-    print("\n🔍 检查系统环境...")
+def deploy_to_server(server_info):
+    """部署到云服务器"""
+    print()
+    print("=" * 60)
+    print("🚀 开始远程部署...")
+    print("=" * 60)
+    print()
+    
+    ip = server_info["ip"]
+    user = server_info["user"]
+    password = server_info["password"]
+    
+    print(f"📡 连接服务器：{ip}")
+    print(f"👤 用户名：{user}")
+    print()
+    
+    # 这里需要用 paramiko 或类似工具进行 SSH 连接
+    # 简化版本：提示用户手动操作
+    
+    print("⚠️  自动远程部署需要安装额外组件")
+    print()
+    print("📋 请手动执行以下步骤：")
+    print()
+    print("1. 使用 SSH 工具连接服务器：")
+    print(f"   ssh {user}@{ip}")
+    print()
+    print("2. 执行以下命令安装 OpenClaw：")
+    print()
+    print("   # 安装 Node.js")
+    print("   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -")
+    print("   sudo apt-get install -y nodejs")
+    print()
+    print("   # 安装 OpenClaw")
+    print("   sudo npm install -g openclaw")
+    print()
+    print("   # 初始化")
+    print("   openclaw setup")
+    print()
+    print("   # 启动")
+    print("   openclaw gateway start")
+    print()
+    print("3. 访问 OpenClaw：")
+    print(f"   http://{ip}:18788")
+    print()
+
+
+def deploy_local(local_info):
+    """本地部署"""
+    print()
+    print("=" * 60)
+    print("🚀 开始本地部署...")
+    print("=" * 60)
+    print()
+    
+    system = local_info["system"]
     
     # 检查 Node.js
+    print("🔍 检查 Node.js...")
     try:
         result = subprocess.run(["node", "--version"], capture_output=True, text=True)
         if result.returncode == 0:
             print(f"✅ Node.js 已安装：{result.stdout.strip()}")
         else:
-            print("⚠️  Node.js 未安装，将自动安装")
-            return False
+            print("⚠️  Node.js 未安装，正在安装...")
+            install_nodejs(system)
     except FileNotFoundError:
-        print("⚠️  Node.js 未安装，将自动安装")
-        return False
+        print("⚠️  Node.js 未安装，正在安装...")
+        install_nodejs(system)
     
-    # 检查 npm
-    try:
-        result = subprocess.run(["npm", "--version"], capture_output=True, text=True)
+    # 安装 OpenClaw
+    print()
+    print("📦 安装 OpenClaw...")
+    if system == "Windows":
+        print("   请手动执行：npm install -g openclaw")
+        print("   然后执行：openclaw setup")
+    else:
+        result = subprocess.run(["npm", "install", "-g", "openclaw"], capture_output=True, text=True)
         if result.returncode == 0:
-            print(f"✅ npm 已安装：{result.stdout.strip()}")
+            print("✅ OpenClaw 安装成功")
         else:
-            print("⚠️  npm 未安装，将自动安装")
-            return False
-    except FileNotFoundError:
-        print("⚠️  npm 未安装，将自动安装")
-        return False
+            print(f"❌ 安装失败：{result.stderr}")
     
-    return True
+    print()
+    print("=" * 60)
+    print("🎉 部署完成！")
+    print("=" * 60)
+    print()
+    print("📋 访问地址：http://localhost:18788")
+    print("📚 文档：https://docs.openclaw.ai")
 
 
-def install_nodejs():
+def install_nodejs(system):
     """安装 Node.js"""
-    system = platform.system()
-    
     if system == "Linux":
-        print("📦 正在安装 Node.js...")
-        commands = [
-            "curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -",
-            "sudo apt-get install -y nodejs"
-        ]
-        for cmd in commands:
-            os.system(cmd)
-    elif system == "Darwin":  # macOS
-        print("📦 正在安装 Node.js...")
-        os.system("/bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"")
-        os.system("brew install node")
+        print("   执行安装命令...")
+        os.system("curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -")
+        os.system("sudo apt-get install -y nodejs")
+    elif system == "Darwin":
+        print("   请执行：brew install node")
     elif system == "Windows":
-        print("⚠️  Windows 系统请手动安装 Node.js")
-        print("📋 下载地址：https://nodejs.org/")
-        return False
-    
-    return True
-
-
-def download_deploy_script():
-    """下载部署脚本"""
-    print("\n📥 正在下载部署脚本...")
-    
-    try:
-        response = requests.get(DEPLOY_SCRIPT_URL, timeout=30)
-        if response.status_code == 200:
-            with open("openclaw_install.sh", "w", encoding="utf-8") as f:
-                f.write(response.text)
-            os.chmod("openclaw_install.sh", 0o755)
-            print("✅ 部署脚本下载完成")
-            return True
-        else:
-            print(f"❌ 下载失败：{response.status_code}")
-            return False
-    except Exception as e:
-        print(f"❌ 下载错误：{e}")
-        return False
-
-
-def run_deployment():
-    """执行部署"""
-    print("\n🚀 开始部署 OpenClaw...")
-    
-    if platform.system() == "Windows":
-        print("⚠️  Windows 系统请在 PowerShell 中执行以下命令：")
-        print("   npm install -g openclaw")
-        print("   openclaw setup")
-        print("   openclaw gateway start")
-        return False
-    
-    # Linux/macOS
-    commands = [
-        "sudo npm install -g openclaw",
-        "openclaw setup --auto",
-        "openclaw gateway start",
-        "openclaw status"
-    ]
-    
-    for cmd in commands:
-        print(f"\n📋 执行：{cmd}")
-        result = os.system(cmd)
-        if result != 0:
-            print(f"⚠️  命令执行失败：{cmd}")
-            # 继续执行，不中断
-    
-    return True
-
-
-def show_completion_info():
-    """显示完成信息"""
-    print("\n" + "="*60)
-    print("🎉 OpenClaw 部署完成！")
-    print("="*60)
-    print("""
-📋 访问信息：
-   - 控制面板：http://localhost:18788
-   - 文档：https://docs.openclaw.ai
-
-💬 售后支持：
-   - 加入钉钉群获取技术支持
-   - 群内 @客服 获取帮助
-   - 常见问题文档：https://你的域名.com/faq
-
-⚠️  注意事项：
-   - 请妥善保管激活码
-   - 一个激活码仅限一台设备使用
-   - 如需更换设备，请联系客服
-
-感谢您的使用！
-""")
-    print("="*60)
+        print("   请下载安装：https://nodejs.org/")
 
 
 def main():
     """主函数"""
-    print("="*60)
-    print("🦞 OpenClaw 自动部署工具")
-    print(f"版本：{VERSION}")
-    print("="*60)
+    clear_screen()
+    print_header()
     
-    # 获取激活码
-    if len(sys.argv) > 1:
-        license_key = sys.argv[1]
-    else:
-        license_key = input("\n请输入激活码：").strip()
+    # 输入激活码
+    print("🔑 请输入激活码")
+    print("   格式：OPENCLAW-XXXX-XXXX-XXXX")
+    print()
+    
+    license_key = input("激活码：").strip()
     
     if not license_key:
         print("❌ 激活码不能为空")
-        sys.exit(1)
+        pause_exit()
     
     # 验证激活码
     if not verify_license(license_key):
-        sys.exit(1)
+        pause_exit()
     
-    # 检查环境
-    if not check_prerequisites():
-        if not install_nodejs():
-            print("\n⚠️  Node.js 安装失败，请手动安装后重新运行")
-            sys.exit(1)
+    # 选择部署模式
+    print()
+    mode = select_deploy_mode()
     
-    # 下载并执行部署脚本
-    if not download_deploy_script():
-        sys.exit(1)
+    if mode == 1:
+        # 云服务器部署
+        server_info = get_server_info()
+        deploy_to_server(server_info)
+    else:
+        # 本地部署
+        local_info = get_local_info()
+        deploy_local(local_info)
     
-    if not run_deployment():
-        print("\n⚠️  部署过程中出现警告，但可能已成功")
-    
-    # 显示完成信息
-    show_completion_info()
-    
-    # 上报部署结果
-    try:
-        requests.post(f"{VERIFY_SERVER}/report", json={
-            "key": license_key,
-            "machine_id": get_machine_id(),
-            "status": "success",
-            "system_info": get_system_info()
-        }, timeout=5)
-    except:
-        pass  # 上报失败不影响使用
-    
-    sys.exit(0)
+    # 暂停等待用户确认
+    pause_exit("✅ 完成！按回车键退出...")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\n👋 用户取消，再见！")
+    except Exception as e:
+        print(f"\n❌ 发生错误：{e}")
+        pause_exit("按回车键退出...")

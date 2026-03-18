@@ -326,7 +326,19 @@ def deploy_local(local_info):
     try:
         result = subprocess.run(["node", "--version"], capture_output=True, text=True)
         if result.returncode == 0:
-            print(f"✅ Node.js 已安装：{result.stdout.strip()}")
+            version_str = result.stdout.strip()
+            print(f"✅ Node.js 已安装：{version_str}")
+            
+            # 检查版本是否 >= 22.12
+            try:
+                major = int(version_str.replace('v', '').split('.')[0])
+                minor = int(version_str.replace('v', '').split('.')[1])
+                if major < 22 or (major == 22 and minor < 12):
+                    print(f"⚠️  Node.js 版本过低，OpenClaw 需要 v22.12+")
+                    print("   正在升级 Node.js...")
+                    install_nodejs(system)
+            except:
+                pass
         else:
             print("⚠️  Node.js 未安装，正在安装...")
             install_nodejs(system)
@@ -835,7 +847,8 @@ def install_nodejs(system):
     """安装 Node.js"""
     if system == "Linux":
         print("   执行安装命令...")
-        os.system("curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -")
+        print("   安装 Node.js v22 LTS...")
+        os.system("curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -")
         os.system("sudo apt-get install -y nodejs")
     elif system == "Darwin":
         print("   请执行：brew install node")
@@ -876,11 +889,12 @@ def install_nodejs(system):
         # 方法3: 下载安装包（使用国内镜像）
         print("   📥 正在下载 Node.js 安装包...")
         print("   使用国内镜像加速下载...")
+        print("   安装版本：Node.js v22.22.1 (LTS)")
         
         nodejs_mirrors = [
-            ("https://npmmirror.com/mirrors/node/v20.18.1/node-v20.18.1-x64.msi", "淘宝镜像"),
-            ("https://mirrors.huaweicloud.com/nodejs/v20.18.1/node-v20.18.1-x64.msi", "华为云镜像"),
-            ("https://nodejs.org/dist/v20.18.1/node-v20.18.1-x64.msi", "Node.js官方"),
+            ("https://npmmirror.com/mirrors/node/v22.22.1/node-v22.22.1-x64.msi", "淘宝镜像"),
+            ("https://mirrors.huaweicloud.com/nodejs/v22.22.1/node-v22.22.1-x64.msi", "华为云镜像"),
+            ("https://nodejs.org/dist/v22.22.1/node-v22.22.1-x64.msi", "Node.js官方"),
         ]
         
         installer_path = os.path.join(os.environ.get("TEMP", "."), "nodejs_installer.msi")

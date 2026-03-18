@@ -365,6 +365,19 @@ def deploy_local(local_info):
                 continue
         
         if npm_cmd:
+            # Windows 上先检查 Git
+            print("   🔍 检查 Git...")
+            if not check_git():
+                print("   ⚠️  未检测到 Git，正在安装...")
+                install_git_windows()
+                print()
+                print("   📌 Git 安装完成，请重新运行此工具")
+                print("   或者关闭窗口后重新打开命令提示符，再运行:")
+                print("   npm install -g openclaw@latest --registry https://registry.npmjs.org")
+                return
+            else:
+                print("   ✅ Git 已安装")
+            
             # 先卸载旧版本（可能存在）
             print("   🔧 清理旧版本...")
             subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], capture_output=True, text=True, shell=True)
@@ -599,6 +612,65 @@ def config_api_key():
         else:
             print("⚠️  未输入 API Key")
     
+    return False
+
+
+def check_git():
+    """检查 Git 是否安装"""
+    try:
+        result = subprocess.run(["git", "--version"], capture_output=True, text=True, shell=True)
+        return result.returncode == 0
+    except:
+        return False
+
+
+def install_git_windows():
+    """在 Windows 上安装 Git"""
+    print("   正在安装 Git...")
+    
+    # 方法1: 使用 winget
+    try:
+        result = subprocess.run(["winget", "--version"], capture_output=True, text=True, shell=True)
+        if result.returncode == 0:
+            print("   使用 winget 安装 Git...")
+            install_result = subprocess.run(
+                ["winget", "install", "Git.Git", "--accept-source-agreements", "--accept-package-agreements"],
+                capture_output=True, text=True, shell=True
+            )
+            if install_result.returncode == 0:
+                print("   ✅ Git 安装成功")
+                return True
+    except:
+        pass
+    
+    # 方法2: 使用 chocolatey
+    try:
+        result = subprocess.run(["choco", "--version"], capture_output=True, text=True, shell=True)
+        if result.returncode == 0:
+            print("   使用 Chocolatey 安装 Git...")
+            os.system("choco install git -y")
+            return True
+    except:
+        pass
+    
+    # 方法3: 下载安装包
+    print("   📥 正在下载 Git 安装包...")
+    git_url = "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/Git-2.47.1-64-bit.exe"
+    installer_path = os.path.join(os.environ.get("TEMP", "."), "git_installer.exe")
+    
+    try:
+        download_cmd = f'powershell -Command "Invoke-WebRequest -Uri \'{git_url}\' -OutFile \'{installer_path}\'"'
+        os.system(download_cmd)
+        
+        if os.path.exists(installer_path):
+            print("   ✅ 下载完成，正在启动安装程序...")
+            print("   ⚠️  请在弹出的安装窗口中完成安装（全部点 Next 即可）")
+            os.system(f'"{installer_path}"')
+            return True
+    except Exception as e:
+        print(f"   ❌ Git 安装失败：{e}")
+    
+    print("   请手动下载安装 Git：https://git-scm.com/download/win")
     return False
 
 

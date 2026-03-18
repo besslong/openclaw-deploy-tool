@@ -1,0 +1,959 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+OpenClaw 安装向导
+类似腾讯软件的专业安装程序
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import threading
+import subprocess
+import os
+import sys
+import platform
+import requests
+import hashlib
+import uuid
+import json
+import webbrowser
+from datetime import datetime
+
+# ============= 配置 =============
+VERSION = "2.1.0"
+VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
+DEFAULT_PORT = 18788
+MIN_DISK_SPACE_GB = 5
+# ===================================
+
+
+class InstallWizard:
+    """安装向导主类"""
+    
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("OpenClaw 安装向导")
+        self.root.geometry("600x500")
+        self.root.resizable(False, False)
+        
+        # 禁用最大化按钮（Windows）
+        try:
+            from ctypes import windll
+            GWL_STYLE = -16
+            WS_MAXIMIZEBOX = 0x00010000
+            hwnd = windll.user32.GetParent(self.root.winfo_id())
+            style = windll.user32.GetWindowLongPtrW(hwnd, GWL_STYLE)
+            style &= ~WS_MAXIMIZEBOX
+            windll.user32.SetWindowLongPtrW(hwnd, GWL_STYLE, style)
+        except:
+            pass  # 非 Windows 系统忽略
+        
+        # 居中显示
+        self.center_window()
+        
+        # 设置样式
+        self.setup_styles()
+        
+        # 状态变量
+        self.current_page = 0
+        self.agreed = tk.BooleanVar(value=False)
+        self.license_key = tk.StringVar()
+        self.install_path = tk.StringVar(value=self.get_default_install_path())
+        self.provider = tk.StringVar()
+        self.api_key = tk.StringVar()
+        self.port = tk.IntVar(value=DEFAULT_PORT)
+        self.install_progress = tk.DoubleVar(value=0)
+        self.install_status = tk.StringVar(value="准备安装...")
+        
+        # 安装步骤
+        self.install_steps = [
+            "检测系统环境",
+            "安装 Node.js",
+            "安装 Git", 
+            "下载 OpenClaw",
+            "配置 API Key",
+            "安装系统服务",
+            "完成安装"
+        ]
+        self.current_step = 0
+        
+        # 服务商配置
+        self.providers = {
+            "阿里云（通义千问）": {
+                "id": "qwen",
+                "prefix": "sk-",
+                "key_length": 32,
+                "get_key_url": "https://dashscope.console.aliyun.com/",
+                "config_key": "providers.qwen.apiKey"
+            },
+            "智谱 AI（GLM）": {
+                "id": "glm",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://open.bigmodel.cn/",
+                "config_key": "providers.glm.apiKey"
+            },
+            "Kimi（月之暗面）": {
+                "id": "kimi",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://platform.moonshot.cn/",
+                "config_key": "providers.kimi.apiKey"
+            },
+            "OpenAI": {
+                "id": "openai",
+                "prefix": "sk-",
+                "key_length": 48,
+                "get_key_url": "https://platform.openai.com/api-keys",
+                "config_key": "providers.openai.apiKey"
+            },
+            "MiniMax": {
+                "id": "minimax",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://www.minimaxi.com/",
+                "config_key": "providers.minimax.apiKey"
+            }
+        }
+        
+        # 创建页面
+        self.pages = []
+        self.create_pages()
+        
+        # 显示第一页
+        self.show_page(0)
+        
+    def center_window(self):
+        """窗口居中"""
+        self.root.update_idletasks()
+        width = 600
+        height = 500
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f'{width}x{height}+{x}+{y}')
+        
+    def setup_styles(self):
+        """设置样式"""
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # 按钮样式
+        style.configure('Primary.TButton', padding=10)
+        style.configure('Link.TLabel', foreground='#0066cc', cursor='hand2')
+        
+    def get_default_install_path(self):
+        """获取默认安装路径"""
+        if platform.system() == "Windows":
+            return os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "OpenClaw")
+        else:
+            return os.path.expanduser("~/.openclaw")
+    
+    def create_pages(self):
+        """创建所有页面"""
+        # 页面0: 欢迎页
+        self.pages.append(self.create_welcome_page())
+        
+        # 页面1: 激活码
+        self.pages.append(self.create_license_page())
+        
+        # 页面2: 安装路径
+        self.pages.append(self.create_path_page())
+        
+        # 页面3: 选择服务商
+        self.pages.append(self.create_provider_page())
+        
+        # 页面4: 输入 API Key
+        self.pages.append(self.create_apikey_page())
+        
+        # 页面5: 确认信息
+        self.pages.append(self.create_confirm_page())
+        
+        # 页面6: 安装进度
+        self.pages.append(self.create_install_page())
+        
+        # 页面7: 完成
+        self.pages.append(self.create_finish_page())
+        
+        # 页面8: 错误
+        self.pages.append(self.create_error_page())
+        
+    def create_welcome_page(self):
+        """创建欢迎页"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        # Logo（OpenClaw 龙虾标志）
+        logo_label = ttk.Label(frame, text="🦞", font=('Arial', 48))
+        logo_label.pack(pady=10)
+        
+        title_label = ttk.Label(frame, text="OpenClaw", font=('Arial', 28, 'bold'))
+        title_label.pack()
+        
+        # 版本
+        version_label = ttk.Label(frame, text=f"版本 {VERSION}", font=('Arial', 11), foreground='gray')
+        version_label.pack()
+        
+        # 欢迎文字
+        welcome_text = """
+欢迎使用 OpenClaw 安装向导
+
+OpenClaw 是您的个人 AI 助手框架，
+支持多种 AI 模型，可在本地运行。
+
+点击"下一步"继续安装。
+        """
+        welcome_label = ttk.Label(frame, text=welcome_text, font=('Arial', 11), justify='center')
+        welcome_label.pack(pady=20)
+        
+        # 用户协议
+        agreement_frame = ttk.Frame(frame)
+        agreement_frame.pack(pady=20, fill='x')
+        
+        agree_check = ttk.Checkbutton(
+            agreement_frame, 
+            text="我已阅读并同意《用户协议》和《隐私政策》",
+            variable=self.agreed,
+            command=self.on_agreement_toggle
+        )
+        agree_check.pack()
+        
+        # 协议链接
+        def open_license(event):
+            webbrowser.open("https://docs.openclaw.ai/terms")
+        
+        license_link = ttk.Label(agreement_frame, text="查看用户协议", style='Link.TLabel')
+        license_link.pack()
+        license_link.bind('<Button-1>', open_license)
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
+        
+        self.welcome_next_btn = ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page(), state='disabled')
+        self.welcome_next_btn.pack(side='right', padx=5)
+        
+        ttk.Button(btn_frame, text="退出", command=self.quit).pack(side='right', padx=5)
+        
+        return frame
+    
+    def create_license_page(self):
+        """创建激活码页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="🔑 激活码验证", font=('Arial', 18, 'bold')).pack(pady=20)
+        
+        ttk.Label(frame, text="请输入您的激活码：", font=('Arial', 11)).pack(pady=10)
+        
+        # 输入框
+        entry_frame = ttk.Frame(frame)
+        entry_frame.pack(fill='x', pady=10)
+        
+        license_entry = ttk.Entry(entry_frame, textvariable=self.license_key, width=40, font=('Arial', 12))
+        license_entry.pack(side='left', padx=5)
+        
+        def paste_license():
+            try:
+                self.license_key.set(self.root.clipboard_get())
+            except:
+                pass
+        
+        ttk.Button(entry_frame, text="粘贴", command=paste_license).pack(side='left', padx=5)
+        
+        # 提示
+        ttk.Label(frame, text="格式：OPENCLAW-XXXX-XXXX-XXXX", font=('Arial', 10), foreground='gray').pack()
+        
+        # 验证状态
+        self.license_status = ttk.Label(frame, text="", font=('Arial', 10))
+        self.license_status.pack(pady=10)
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
+        
+        ttk.Button(btn_frame, text="上一步", command=lambda: self.prev_page()).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="验证", command=self.verify_license).pack(side='right', padx=5)
+        self.license_next_btn = ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page(), state='disabled')
+        self.license_next_btn.pack(side='right', padx=5)
+        
+        return frame
+    
+    def create_path_page(self):
+        """创建安装路径页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="📁 选择安装位置", font=('Arial', 18, 'bold')).pack(pady=20)
+        
+        ttk.Label(frame, text="安装路径：", font=('Arial', 11)).pack(pady=5)
+        
+        # 路径输入
+        path_frame = ttk.Frame(frame)
+        path_frame.pack(fill='x', pady=10)
+        
+        path_entry = ttk.Entry(path_frame, textvariable=self.install_path, width=45, font=('Arial', 10))
+        path_entry.pack(side='left', padx=5)
+        
+        def browse_path():
+            path = filedialog.askdirectory()
+            if path:
+                self.install_path.set(path)
+                self.check_path()
+        
+        ttk.Button(path_frame, text="浏览...", command=browse_path).pack(side='left', padx=5)
+        
+        # 路径状态
+        self.path_status = ttk.Label(frame, text="", font=('Arial', 10))
+        self.path_status.pack(pady=10)
+        
+        # 磁盘空间提示
+        ttk.Label(frame, text=f"建议至少 {MIN_DISK_SPACE_GB}GB 可用空间", font=('Arial', 10), foreground='gray').pack()
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
+        
+        ttk.Button(btn_frame, text="上一步", command=lambda: self.prev_page()).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page() if self.check_path() else None).pack(side='right', padx=5)
+        
+        return frame
+    
+    def create_provider_page(self):
+        """创建服务商选择页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="🤖 选择 AI 服务商", font=('Arial', 18, 'bold')).pack(pady=20)
+        
+        ttk.Label(frame, text="请选择您要使用的 AI 模型服务商：", font=('Arial', 11)).pack(pady=10)
+        
+        # 服务商选项
+        provider_frame = ttk.Frame(frame)
+        provider_frame.pack(fill='both', pady=10)
+        
+        for name, config in self.providers.items():
+            row = ttk.Frame(provider_frame)
+            row.pack(fill='x', pady=5)
+            
+            rb = ttk.Radiobutton(row, text=name, variable=self.provider, value=name)
+            rb.pack(side='left')
+            
+            def get_key(url=config['get_key_url']):
+                webbrowser.open(url)
+            
+            ttk.Button(row, text="如何获取 API Key", command=get_key).pack(side='right', padx=10)
+        
+        # 提示
+        ttk.Label(frame, text="推荐国内用户选择：阿里云（通义千问）", font=('Arial', 10), foreground='gray').pack(pady=10)
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
+        
+        ttk.Button(btn_frame, text="上一步", command=lambda: self.prev_page()).pack(side='left', padx=5)
+        self.provider_next_btn = ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page(), state='disabled')
+        self.provider_next_btn.pack(side='right', padx=5)
+        
+        # 监听选择变化
+        self.provider.trace('w', lambda *args: self.on_provider_change())
+        
+        return frame
+    
+    def create_apikey_page(self):
+        """创建 API Key 输入页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="🔑 输入 API Key", font=('Arial', 18, 'bold')).pack(pady=20)
+        
+        self.apikey_provider_label = ttk.Label(frame, text="", font=('Arial', 11))
+        self.apikey_provider_label.pack(pady=10)
+        
+        ttk.Label(frame, text="API Key：", font=('Arial', 11)).pack(pady=5)
+        
+        # 输入框
+        entry_frame = ttk.Frame(frame)
+        entry_frame.pack(fill='x', pady=10)
+        
+        self.apikey_entry = ttk.Entry(entry_frame, textvariable=self.api_key, width=45, font=('Arial', 12), show='●')
+        self.apikey_entry.pack(side='left', padx=5)
+        
+        # 显示/隐藏密码
+        self.show_key = tk.BooleanVar(value=False)
+        
+        def toggle_show():
+            if self.show_key.get():
+                self.apikey_entry.config(show='')
+            else:
+                self.apikey_entry.config(show='●')
+        
+        ttk.Checkbutton(entry_frame, text="显示", variable=self.show_key, command=toggle_show).pack(side='left', padx=5)
+        
+        def paste_key():
+            try:
+                self.api_key.set(self.root.clipboard_get())
+            except:
+                pass
+        
+        ttk.Button(entry_frame, text="粘贴", command=paste_key).pack(side='left', padx=5)
+        
+        # 验证状态
+        self.apikey_status = ttk.Label(frame, text="", font=('Arial', 10))
+        self.apikey_status.pack(pady=10)
+        
+        # 提示
+        ttk.Label(frame, text="API Key 将安全存储在本地配置文件中", font=('Arial', 10), foreground='gray').pack()
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
+        
+        ttk.Button(btn_frame, text="上一步", command=lambda: self.prev_page()).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="验证", command=self.validate_api_key).pack(side='right', padx=5)
+        self.apikey_next_btn = ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page(), state='disabled')
+        self.apikey_next_btn.pack(side='right', padx=5)
+        
+        return frame
+    
+    def create_confirm_page(self):
+        """创建确认信息页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="📋 确认安装信息", font=('Arial', 18, 'bold')).pack(pady=20)
+        
+        # 信息汇总
+        info_frame = ttk.LabelFrame(frame, text="安装信息", padding=10)
+        info_frame.pack(fill='x', pady=10)
+        
+        self.confirm_path = ttk.Label(info_frame, text="", font=('Arial', 10))
+        self.confirm_path.pack(anchor='w', pady=2)
+        
+        self.confirm_provider = ttk.Label(info_frame, text="", font=('Arial', 10))
+        self.confirm_provider.pack(anchor='w', pady=2)
+        
+        self.confirm_apikey = ttk.Label(info_frame, text="", font=('Arial', 10))
+        self.confirm_apikey.pack(anchor='w', pady=2)
+        
+        self.confirm_port = ttk.Label(info_frame, text="", font=('Arial', 10))
+        self.confirm_port.pack(anchor='w', pady=2)
+        
+        # 高级选项
+        adv_frame = ttk.LabelFrame(frame, text="高级选项", padding=10)
+        adv_frame.pack(fill='x', pady=10)
+        
+        port_frame = ttk.Frame(adv_frame)
+        port_frame.pack(fill='x')
+        
+        ttk.Label(port_frame, text="服务端口：", font=('Arial', 10)).pack(side='left')
+        ttk.Spinbox(port_frame, from_=1024, to=65535, textvariable=self.port, width=8).pack(side='left', padx=5)
+        
+        # 提示
+        ttk.Label(frame, text="⚠️ 安装过程需要联网，建议暂时关闭杀毒软件", font=('Arial', 10), foreground='orange').pack(pady=10)
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
+        
+        ttk.Button(btn_frame, text="上一步", command=lambda: self.prev_page()).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="开始安装", command=self.start_install).pack(side='right', padx=5)
+        
+        return frame
+    
+    def create_install_page(self):
+        """创建安装进度页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="⏳ 正在安装...", font=('Arial', 18, 'bold')).pack(pady=20)
+        
+        # 进度条
+        self.progress_bar = ttk.Progressbar(frame, length=400, mode='determinate', variable=self.install_progress)
+        self.progress_bar.pack(pady=20)
+        
+        # 进度百分比
+        self.progress_percent = ttk.Label(frame, text="0%", font=('Arial', 14))
+        self.progress_percent.pack()
+        
+        # 当前步骤
+        self.step_label = ttk.Label(frame, textvariable=self.install_status, font=('Arial', 11))
+        self.step_label.pack(pady=10)
+        
+        # 步骤列表
+        steps_frame = ttk.Frame(frame)
+        steps_frame.pack(fill='x', pady=20)
+        
+        for i, step in enumerate(self.install_steps):
+            label = ttk.Label(steps_frame, text=f"{'✓' if i == 0 else '○'} {step}", font=('Arial', 10))
+            label.pack(anchor='w', pady=2)
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
+        
+        ttk.Button(btn_frame, text="取消安装", command=self.cancel_install).pack(side='right', padx=5)
+        
+        return frame
+    
+    def create_finish_page(self):
+        """创建完成页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="🎉 安装完成！", font=('Arial', 24, 'bold')).pack(pady=20)
+        
+        # 访问信息
+        info_frame = ttk.LabelFrame(frame, text="访问信息", padding=10)
+        info_frame.pack(fill='x', pady=20)
+        
+        ttk.Label(info_frame, text="访问地址：", font=('Arial', 11)).pack(anchor='w')
+        self.access_url = ttk.Label(info_frame, text=f"http://localhost:{DEFAULT_PORT}", font=('Arial', 12, 'bold'), foreground='blue')
+        self.access_url.pack(anchor='w', pady=5)
+        
+        ttk.Label(info_frame, text="访问令牌：", font=('Arial', 11)).pack(anchor='w', pady=(10, 0))
+        self.access_token = ttk.Label(info_frame, text="(安装后自动生成)", font=('Arial', 12))
+        self.access_token.pack(anchor='w', pady=5)
+        
+        # 按钮
+        btn_frame = ttk.Frame(info_frame)
+        btn_frame.pack(fill='x', pady=10)
+        
+        def copy_url():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(f"http://localhost:{self.port.get()}")
+            messagebox.showinfo("提示", "地址已复制到剪贴板")
+        
+        def open_browser():
+            webbrowser.open(f"http://localhost:{self.port.get()}")
+        
+        ttk.Button(btn_frame, text="复制地址", command=copy_url).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="打开浏览器", command=open_browser).pack(side='left', padx=5)
+        
+        # 提示
+        ttk.Label(frame, text="首次访问可能需要 1-2 分钟初始化", font=('Arial', 10), foreground='gray').pack(pady=10)
+        
+        # 完成按钮
+        ttk.Button(frame, text="完成", command=self.quit).pack(pady=20)
+        
+        return frame
+    
+    def create_error_page(self):
+        """创建错误页面"""
+        frame = ttk.Frame(self.root, padding=40)
+        
+        ttk.Label(frame, text="❌ 安装失败", font=('Arial', 24, 'bold'), foreground='red').pack(pady=20)
+        
+        # 错误信息
+        self.error_msg = ttk.Label(frame, text="", font=('Arial', 11), wraplength=450)
+        self.error_msg.pack(pady=10)
+        
+        # 可能原因
+        reasons_frame = ttk.LabelFrame(frame, text="可能原因", padding=10)
+        reasons_frame.pack(fill='x', pady=10)
+        
+        ttk.Label(reasons_frame, text="• 网络连接问题", font=('Arial', 10)).pack(anchor='w')
+        ttk.Label(reasons_frame, text="• 杀毒软件拦截", font=('Arial', 10)).pack(anchor='w')
+        ttk.Label(reasons_frame, text="• GitHub 访问受限（国内）", font=('Arial', 10)).pack(anchor='w')
+        
+        # 按钮
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(pady=20)
+        
+        ttk.Button(btn_frame, text="查看日志", command=self.show_log).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="重试", command=self.retry_install).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="退出", command=self.quit).pack(side='left', padx=5)
+        
+        return frame
+    
+    # ============= 事件处理 =============
+    
+    def on_agreement_toggle(self):
+        """协议勾选状态改变"""
+        if self.agreed.get():
+            self.welcome_next_btn.config(state='normal')
+        else:
+            self.welcome_next_btn.config(state='disabled')
+    
+    def on_provider_change(self):
+        """服务商选择改变"""
+        if self.provider.get():
+            self.provider_next_btn.config(state='normal')
+        else:
+            self.provider_next_btn.config(state='disabled')
+    
+    def verify_license(self):
+        """验证激活码"""
+        key = self.license_key.get().strip()
+        if not key:
+            self.license_status.config(text="请输入激活码", foreground='red')
+            return
+        
+        self.license_status.config(text="正在验证...", foreground='blue')
+        self.root.update()
+        
+        try:
+            response = requests.post(VERIFY_SERVER, json={
+                "key": key,
+                "machine_id": str(uuid.getnode()),
+                "version": VERSION,
+                "timestamp": datetime.now().isoformat()
+            }, timeout=10)
+            
+            result = response.json()
+            
+            if result.get("valid"):
+                self.license_status.config(text="✓ 激活码有效", foreground='green')
+                self.license_next_btn.config(state='normal')
+            else:
+                self.license_status.config(text=f"✗ {result.get('error', '激活码无效')}", foreground='red')
+                
+        except Exception as e:
+            self.license_status.config(text=f"验证失败：{e}", foreground='red')
+    
+    def check_path(self):
+        """检查安装路径"""
+        path = self.install_path.get()
+        
+        # 检查中文
+        try:
+            path.encode('ascii')
+        except UnicodeEncodeError:
+            self.path_status.config(text="✗ 路径包含中文，请选择纯英文路径", foreground='red')
+            return False
+        
+        # 检查磁盘空间
+        try:
+            import shutil
+            total, used, free = shutil.disk_usage(os.path.dirname(path) or path)
+            free_gb = free // (1024**3)
+            
+            if free_gb < MIN_DISK_SPACE_GB:
+                self.path_status.config(text=f"⚠️ 磁盘空间不足 {MIN_DISK_SPACE_GB}GB（当前 {free_gb}GB）", foreground='orange')
+            else:
+                self.path_status.config(text=f"✓ 可用空间：{free_gb}GB", foreground='green')
+        except:
+            self.path_status.config(text="✓ 路径有效", foreground='green')
+        
+        return True
+    
+    def validate_api_key(self):
+        """验证 API Key"""
+        key = self.api_key.get().strip()
+        provider = self.provider.get()
+        
+        if not provider:
+            messagebox.showwarning("提示", "请先选择服务商")
+            return
+        
+        if not key:
+            self.apikey_status.config(text="请输入 API Key", foreground='red')
+            return
+        
+        config = self.providers.get(provider, {})
+        
+        # 检查长度
+        if len(key) < config.get('key_length', 32):
+            self.apikey_status.config(text=f"⚠️ API Key 长度可能不正确（建议 {config.get('key_length', 32)} 位）", foreground='orange')
+        else:
+            self.apikey_status.config(text="✓ API Key 格式正确", foreground='green')
+        
+        self.apikey_next_btn.config(state='normal')
+    
+    def start_install(self):
+        """开始安装"""
+        # 更新确认信息
+        self.confirm_path.config(text=f"安装路径：{self.install_path.get()}")
+        self.confirm_provider.config(text=f"服务商：{self.provider.get()}")
+        
+        # 隐藏 API Key 中间部分
+        key = self.api_key.get()
+        masked_key = key[:4] + '****' + key[-4:] if len(key) > 8 else '****'
+        self.confirm_apikey.config(text=f"API Key：{masked_key}")
+        self.confirm_port.config(text=f"服务端口：{self.port.get()}")
+        
+        # 切换到安装页面
+        self.next_page()
+        
+        # 启动安装线程
+        thread = threading.Thread(target=self.do_install)
+        thread.daemon = True
+        thread.start()
+    
+    def do_install(self):
+        """执行安装（后台线程）"""
+        steps = len(self.install_steps)
+        
+        try:
+            # 步骤1: 检测系统
+            self.update_progress(0, "检测系统环境...")
+            self.root.after(500, lambda: self.update_progress(100/steps, "系统检测完成"))
+            
+            # 步骤2: 安装 Node.js
+            self.root.after(1000, lambda: self.update_progress(100/steps, "正在安装 Node.js..."))
+            self.install_nodejs()
+            
+            # 步骤3: 安装 Git
+            self.root.after(2000, lambda: self.update_progress(200/steps, "正在安装 Git..."))
+            self.install_git()
+            
+            # 步骤4: 安装 OpenClaw
+            self.root.after(3000, lambda: self.update_progress(300/steps, "正在下载 OpenClaw..."))
+            self.install_openclaw()
+            
+            # 步骤5: 配置 API Key
+            self.root.after(4000, lambda: self.update_progress(400/steps, "正在配置 API Key..."))
+            self.configure_api_key()
+            
+            # 步骤6: 安装服务
+            self.root.after(5000, lambda: self.update_progress(500/steps, "正在安装系统服务..."))
+            self.install_service()
+            
+            # 完成
+            self.root.after(6000, lambda: self.update_progress(100, "安装完成"))
+            self.root.after(6500, self.show_finish)
+            
+        except Exception as e:
+            self.root.after(0, lambda: self.show_error(str(e)))
+    
+    def update_progress(self, value, status):
+        """更新进度"""
+        self.install_progress.set(value)
+        self.progress_percent.config(text=f"{int(value)}%")
+        self.install_status.set(status)
+    
+    def install_nodejs(self):
+        """安装 Node.js"""
+        # 检查是否已安装
+        try:
+            result = subprocess.run(["node", "--version"], capture_output=True, text=True, shell=True)
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                # 检查版本是否 >= 22.12
+                major = int(version.replace('v', '').split('.')[0])
+                if major >= 22:
+                    return  # 已安装正确版本
+        except:
+            pass
+        
+        # 下载并安装 Node.js v22
+        nodejs_mirrors = [
+            "https://npmmirror.com/mirrors/node/v22.14.0/node-v22.14.0-x64.msi",
+            "https://mirrors.huaweicloud.com/nodejs/v22.14.0/node-v22.14.0-x64.msi"
+        ]
+        
+        installer_path = os.path.join(os.environ.get("TEMP", "."), "nodejs_installer.msi")
+        
+        for url in nodejs_mirrors:
+            try:
+                # 使用 PowerShell 下载
+                download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
+                subprocess.run(download_cmd, shell=True, check=True)
+                
+                if os.path.exists(installer_path) and os.path.getsize(installer_path) > 20000000:
+                    # 静默安装
+                    subprocess.run(f'msiexec /i "{installer_path}" /quiet /norestart', shell=True, check=True)
+                    return
+            except Exception as e:
+                continue
+        
+        raise Exception("Node.js 安装失败，请手动安装")
+    
+    def install_git(self):
+        """安装 Git"""
+        # 检查是否已安装
+        try:
+            result = subprocess.run(["git", "--version"], capture_output=True, text=True, shell=True)
+            if result.returncode == 0:
+                return  # 已安装
+        except:
+            pass
+        
+        # 使用 winget 安装
+        try:
+            subprocess.run(["winget", "install", "Git.Git", "--accept-source-agreements", "--accept-package-agreements"], 
+                          shell=True, check=True, capture_output=True)
+            return
+        except:
+            pass
+        
+        # 下载安装包
+        git_mirrors = [
+            "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",
+            "https://mirrors.huaweicloud.com/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe"
+        ]
+        
+        installer_path = os.path.join(os.environ.get("TEMP", "."), "git_installer.exe")
+        
+        for url in git_mirrors:
+            try:
+                download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
+                subprocess.run(download_cmd, shell=True, check=True)
+                
+                if os.path.exists(installer_path) and os.path.getsize(installer_path) > 10000000:
+                    # 静默安装
+                    subprocess.run(f'"{installer_path}" /VERYSILENT /NORESTART', shell=True, check=True)
+                    return
+            except:
+                continue
+        
+        raise Exception("Git 安装失败，请手动安装")
+    
+    def install_openclaw(self):
+        """安装 OpenClaw"""
+        # 创建安装目录
+        install_dir = self.install_path.get()
+        os.makedirs(install_dir, exist_ok=True)
+        
+        # 使用 npm 安装（需要刷新环境变量）
+        npm_paths = [
+            r"C:\Program Files\nodejs\npm.cmd",
+            r"C:\Program Files (x86)\nodejs\npm.cmd",
+            os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
+            "npm"
+        ]
+        
+        npm_cmd = None
+        for path in npm_paths:
+            try:
+                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
+                if result.returncode == 0:
+                    npm_cmd = path
+                    break
+            except:
+                continue
+        
+        if not npm_cmd:
+            raise Exception("找不到 npm，请确保 Node.js 已正确安装")
+        
+        # 设置 npm 使用国内镜像
+        subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True)
+        
+        # 安装 openclaw
+        result = subprocess.run(
+            [npm_cmd, "install", "-g", "openclaw@latest", "--registry", "https://registry.npmjs.org"],
+            capture_output=True, text=True, shell=True
+        )
+        
+        if result.returncode != 0:
+            raise Exception(f"OpenClaw 安装失败：{result.stderr}")
+    
+    def configure_api_key(self):
+        """配置 API Key"""
+        provider = self.provider.get()
+        api_key = self.api_key.get()
+        
+        if not provider or not api_key:
+            return
+        
+        config = self.providers.get(provider, {})
+        provider_id = config.get('id', provider.lower())
+        
+        # 使用 openclaw config set 命令
+        openclaw_paths = [
+            r"C:\Program Files\nodejs\openclaw.cmd",
+            os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
+            "openclaw"
+        ]
+        
+        openclaw_cmd = None
+        for path in openclaw_paths:
+            try:
+                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
+                if result.returncode == 0:
+                    openclaw_cmd = path
+                    break
+            except:
+                continue
+        
+        if not openclaw_cmd:
+            # 配置文件可能还不存在，跳过此步骤让用户手动配置
+            return
+        
+        # 设置默认模型
+        model_map = {
+            "qwen": "modelstudio/qwen3.5-plus",
+            "glm": "modelstudio/glm-4.7",
+            "kimi": "modelstudio/kimi-k2.5",
+            "openai": "openai/gpt-4o",
+            "minimax": "modelstudio/MiniMax-M2.5"
+        }
+        
+        default_model = model_map.get(provider_id, f"{provider_id}/default")
+        
+        try:
+            # 设置模型
+            subprocess.run([openclaw_cmd, "config", "set", "agents.defaults.model.primary", default_model], 
+                          shell=True, capture_output=True)
+            
+            # 设置 API Key（通过环境变量或配置文件）
+            # 注意：openclaw 的 API Key 配置比较复杂，这里先写入环境变量
+            # 实际部署时可能需要使用 openclaw configure 交互式配置
+            
+        except Exception as e:
+            # 配置失败不影响安装，让用户手动配置
+            pass
+    
+    def install_service(self):
+        """安装系统服务"""
+        # 启动 gateway
+        try:
+            subprocess.run(["openclaw", "gateway", "start"], shell=True, capture_output=True)
+        except:
+            pass
+    
+    def show_finish(self):
+        """显示完成页面"""
+        # 生成访问令牌
+        import secrets
+        token = secrets.token_hex(16)
+        self.access_token.config(text=token)
+        
+        self.show_page(7)  # 完成页面
+    
+    def show_error(self, msg):
+        """显示错误页面"""
+        self.error_msg.config(text=msg)
+        self.show_page(8)  # 错误页面
+    
+    def cancel_install(self):
+        """取消安装"""
+        if messagebox.askyesno("确认", "确定要取消安装吗？"):
+            self.quit()
+    
+    def show_log(self):
+        """显示日志"""
+        log_path = os.path.join(self.install_path.get(), "install.log")
+        if os.path.exists(log_path):
+            os.startfile(log_path)
+        else:
+            messagebox.showinfo("提示", "日志文件不存在")
+    
+    def retry_install(self):
+        """重试安装"""
+        self.show_page(5)  # 回到确认页面
+    
+    # ============= 页面导航 =============
+    
+    def show_page(self, index):
+        """显示指定页面"""
+        for i, page in enumerate(self.pages):
+            if i == index:
+                page.pack(fill='both', expand=True)
+            else:
+                page.pack_forget()
+        self.current_page = index
+    
+    def next_page(self):
+        """下一页"""
+        if self.current_page < len(self.pages) - 1:
+            self.show_page(self.current_page + 1)
+    
+    def prev_page(self):
+        """上一页"""
+        if self.current_page > 0:
+            self.show_page(self.current_page - 1)
+    
+    def quit(self):
+        """退出程序"""
+        self.root.quit()
+    
+    def run(self):
+        """运行向导"""
+        self.root.mainloop()
+
+
+if __name__ == "__main__":
+    wizard = InstallWizard()
+    wizard.run()

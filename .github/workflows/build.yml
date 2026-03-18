@@ -1,4 +1,4 @@
-name: Build OpenClaw Deploy Tool
+name: Build OpenClaw Installer
 
 on:
   push:
@@ -10,14 +10,10 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest]
         include:
-          - os: ubuntu-latest
-            artifact_name: OpenClaw-部署工具-linux
           - os: windows-latest
-            artifact_name: OpenClaw-部署工具.exe
-          - os: macos-latest
-            artifact_name: OpenClaw-部署工具-mac
+            artifact_name: OpenClaw-安装程序
 
     runs-on: ${{ matrix.os }}
 
@@ -35,19 +31,14 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          pyinstaller --onefile --name "OpenClaw-部署工具" deploy_client.py
-        else
-          pyinstaller --onefile --name "OpenClaw-部署工具" deploy_client.py
-          chmod +x dist/OpenClaw-部署工具
-        fi
+        pyinstaller --onefile --windowed --name "OpenClaw-安装程序" --icon=NONE installer.py
       shell: bash
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
-        path: dist/OpenClaw-部署工具*
+        path: dist/OpenClaw-安装程序*
         retention-days: 30
 
   release:
@@ -58,7 +49,7 @@ jobs:
       contents: write
 
     steps:
-    - name: Download all artifacts
+    - name: Download artifact
       uses: actions/download-artifact@v4
       with:
         path: artifacts
@@ -67,7 +58,5 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          artifacts/OpenClaw-部署工具-linux/OpenClaw-部署工具
-          artifacts/OpenClaw-部署工具.exe/OpenClaw-部署工具.exe
-          artifacts/OpenClaw-部署工具-mac/OpenClaw-部署工具
+          artifacts/OpenClaw-安装程序/OpenClaw-安装程序.exe
         generate_release_notes: true

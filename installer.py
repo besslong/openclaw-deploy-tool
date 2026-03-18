@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.9"
+VERSION = "3.3.0"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1282,6 +1282,16 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             if "model" not in config["agents"]["defaults"]:
                 config["agents"]["defaults"]["model"] = {}
             config["agents"]["defaults"]["model"]["primary"] = primary_model
+            
+            # 设置模型白名单（用户只能看到这些模型）
+            if chat_models:
+                models_whitelist = {}
+                for model_id, score, _ in chat_models[:6]:  # 最多 6 个模型
+                    # 提取模型简称作为 alias
+                    short_name = model_id.split("/")[-1]
+                    models_whitelist[model_id] = {"alias": short_name}
+                config["agents"]["defaults"]["models"] = models_whitelist
+                print(f"✓ 模型白名单: {list(models_whitelist.keys())}")
             
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)

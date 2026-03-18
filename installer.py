@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.2"
+VERSION = "3.2.3"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -40,16 +40,16 @@ else:
     FONT_FAMILY = "Arial"
 
 # ============= 服务商→模型对照表 =============
-# 每个服务商配置：推荐模型白名单 + 默认模型
+# 每个服务商配置：环境变量名 + 推荐模型 + 默认模型
 PROVIDER_MODELS = {
     "qianfan": {
         "name": "百度千帆",
+        "env_key": "QIANFAN_API_KEY",
         "models": [
             "qianfan/ernie-4.0-8k",
             "qianfan/ernie-4.0-turbo-8k", 
             "qianfan/ernie-3.5-8k",
             "qianfan/deepseek-v3",
-            "qianfan/deepseek-r1",
             "qianfan/qwen3.5-plus"
         ],
         "primary": "qianfan/ernie-4.0-8k",
@@ -57,18 +57,19 @@ PROVIDER_MODELS = {
     },
     "qwen": {
         "name": "阿里云（通义千问）",
+        "env_key": "MODELSTUDIO_API_KEY",
         "models": [
             "qwen/qwen3.5-plus",
             "qwen/qwen3.5-turbo",
             "qwen/qwen3-72b-instruct",
-            "qwen/qwen2.5-72b-instruct",
-            "qwen/qwen-long"
+            "qwen/qwen2.5-72b-instruct"
         ],
         "primary": "qwen/qwen3.5-plus",
         "get_key_url": "https://dashscope.console.aliyun.com/"
     },
     "openai": {
         "name": "OpenAI",
+        "env_key": "OPENAI_API_KEY",
         "models": [
             "openai/gpt-4o",
             "openai/gpt-4o-mini",
@@ -80,17 +81,18 @@ PROVIDER_MODELS = {
     },
     "moonshot": {
         "name": "Kimi（月之暗面）",
+        "env_key": "MOONSHOT_API_KEY",
         "models": [
             "moonshot/kimi-k2.5",
             "moonshot/moonshot-v1-128k",
-            "moonshot/moonshot-v1-32k",
-            "moonshot/moonshot-v1-8k"
+            "moonshot/moonshot-v1-32k"
         ],
         "primary": "moonshot/kimi-k2.5",
         "get_key_url": "https://platform.moonshot.cn/"
     },
     "minimax": {
         "name": "MiniMax",
+        "env_key": "MINIMAX_API_KEY",
         "models": [
             "minimax/abab6.5s-chat",
             "minimax/abab6.5g-chat",
@@ -101,6 +103,7 @@ PROVIDER_MODELS = {
     },
     "volcengine": {
         "name": "火山引擎（字节）",
+        "env_key": "VOLCANO_ENGINE_API_KEY",
         "models": [
             "volcengine/doubao-pro-256k",
             "volcengine/doubao-pro-32k",
@@ -111,6 +114,7 @@ PROVIDER_MODELS = {
     },
     "anthropic": {
         "name": "Anthropic (Claude)",
+        "env_key": "ANTHROPIC_API_KEY",
         "models": [
             "anthropic/claude-sonnet-4-20250514",
             "anthropic/claude-3-5-sonnet",
@@ -121,12 +125,24 @@ PROVIDER_MODELS = {
     },
     "deepseek": {
         "name": "DeepSeek",
+        "env_key": "DEEPSEEK_API_KEY",
         "models": [
             "deepseek/deepseek-chat",
             "deepseek/deepseek-reasoner"
         ],
         "primary": "deepseek/deepseek-chat",
         "get_key_url": "https://platform.deepseek.com/"
+    },
+    "zai": {
+        "name": "智谱 AI (GLM)",
+        "env_key": "ZAI_API_KEY",
+        "models": [
+            "zai/glm-5",
+            "zai/glm-4.7",
+            "zai/glm-4.6"
+        ],
+        "primary": "zai/glm-5",
+        "get_key_url": "https://open.bigmodel.cn/"
     }
 }
 # ===================================
@@ -1087,6 +1103,9 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             print(f"未知服务商: {provider_id}")
             return
         
+        env_key = provider_config.get("env_key", f"{provider_id.upper()}_API_KEY")
+        primary_model = provider_config.get("primary", "")
+        
         # 查找 openclaw 命令路径
         openclaw_paths = [
             r"C:\Program Files\nodejs\openclaw.cmd",
@@ -1109,24 +1128,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             return
         
         try:
-            # 1. 设置模型白名单
-            models = provider_config.get("models", [])
-            if models:
-                models_json = json.dumps(models)
-                subprocess.run(
-                    [openclaw_cmd, "config", "set", "agents.defaults.models", models_json],
-                    shell=True, capture_output=True, text=True, timeout=30
-                )
-            
-            # 2. 设置默认模型
-            primary_model = provider_config.get("primary", models[0] if models else "")
-            if primary_model:
-                subprocess.run(
-                    [openclaw_cmd, "config", "set", "agents.defaults.model.primary", primary_model],
-                    shell=True, capture_output=True, text=True, timeout=30
-                )
-            
-            # 3. 写入 API Key 到配置文件
+            # 1. 写入配置文件（使用正确的格式）
             config_path = os.path.expanduser("~/.openclaw/openclaw.json")
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             
@@ -1139,19 +1141,41 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 except:
                     pass
             
-            # 设置 API Key
-            if "providers" not in config:
-                config["providers"] = {}
-            if provider_id not in config["providers"]:
-                config["providers"][provider_id] = {}
-            config["providers"][provider_id]["apiKey"] = api_key
+            # 设置 env 中的 API Key
+            if "env" not in config:
+                config["env"] = {}
+            config["env"][env_key] = api_key
+            
+            # 设置 agents.defaults.model.primary
+            if "agents" not in config:
+                config["agents"] = {}
+            if "defaults" not in config["agents"]:
+                config["agents"]["defaults"] = {}
+            if "model" not in config["agents"]["defaults"]:
+                config["agents"]["defaults"]["model"] = {}
+            config["agents"]["defaults"]["model"]["primary"] = primary_model
             
             # 写回配置文件
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
-            print(f"API Key 配置成功: {provider_id}")
-            print(f"默认模型: {primary_model}")
+            print(f"✓ API Key 配置成功: {env_key}")
+            print(f"✓ 默认模型: {primary_model}")
+            
+            # 2. 也通过命令行设置（确保生效）
+            subprocess.run(
+                [openclaw_cmd, "config", "set", "agents.defaults.model.primary", primary_model],
+                shell=True, capture_output=True, text=True, timeout=30
+            )
+            
+            # 3. 运行 doctor --fix（可选，清理残留问题）
+            self.root.after(0, lambda: self.update_progress(72, "检查配置..."))
+            result = subprocess.run(
+                [openclaw_cmd, "doctor", "--fix"],
+                shell=True, capture_output=True, text=True, timeout=60
+            )
+            if result.returncode == 0:
+                print("✓ 配置检查通过")
             
         except Exception as e:
             print(f"配置警告: {e}")

@@ -911,15 +911,6 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 continue
         
         raise Exception("Node.js 安装失败，请手动安装 v22 或更高版本")
-                
-                if os.path.exists(installer_path) and os.path.getsize(installer_path) > 20000000:
-                    # 静默安装
-                    subprocess.run(f'msiexec /i "{installer_path}" /quiet /norestart', shell=True, check=True)
-                    return
-            except Exception as e:
-                continue
-        
-        raise Exception("Node.js 安装失败，请手动安装")
     
     def install_git(self):
         """安装 Git"""

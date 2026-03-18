@@ -22,7 +22,7 @@ from datetime import datetime
 # ============= 配置 =============
 VERSION = "3.0.5"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
-DEFAULT_PORT = 18788
+DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
 
 # ============= 品牌配色 =============
@@ -618,7 +618,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(side='bottom', fill='x', pady=20)
         
-        ttk.Button(btn_frame, text="取消安装", command=self.cancel_install).pack(side='right', padx=5)
+        cancel_btn = ttk.Button(btn_frame, text="取消安装", command=self.cancel_install)
+        cancel_btn.pack(side='right', padx=5)
         
         return frame
     
@@ -636,9 +637,12 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.access_url = ttk.Label(info_frame, text=f"http://localhost:{DEFAULT_PORT}", font=('Arial', 12, 'bold'), foreground='blue')
         self.access_url.pack(anchor='w', pady=5)
         
-        ttk.Label(info_frame, text="访问令牌：", font=('Arial', 11)).pack(anchor='w', pady=(10, 0))
-        self.access_token = ttk.Label(info_frame, text="(安装后自动生成)", font=('Arial', 12))
-        self.access_token.pack(anchor='w', pady=5)
+        ttk.Label(info_frame, text="", font=('Arial', 8)).pack()  # 空行
+        
+        # 提示：需要配置 API Key
+        ttk.Label(info_frame, text="⚠️ 重要提示：", font=('Arial', 11, 'bold'), foreground='orange').pack(anchor='w')
+        ttk.Label(info_frame, text="首次使用请运行以下命令配置 API Key：", font=('Arial', 10)).pack(anchor='w')
+        ttk.Label(info_frame, text="openclaw configure", font=('Arial', 11, 'bold'), foreground='blue').pack(anchor='w', pady=5)
         
         # 按钮
         btn_frame = ttk.Frame(info_frame)
@@ -646,11 +650,11 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         def copy_url():
             self.root.clipboard_clear()
-            self.root.clipboard_append(f"http://localhost:{self.port.get()}")
+            self.root.clipboard_append(f"http://localhost:{DEFAULT_PORT}")
             messagebox.showinfo("提示", "地址已复制到剪贴板")
         
         def open_browser():
-            webbrowser.open(f"http://localhost:{self.port.get()}")
+            webbrowser.open(f"http://localhost:{DEFAULT_PORT}")
         
         ttk.Button(btn_frame, text="复制地址", command=copy_url).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="打开浏览器", command=open_browser).pack(side='left', padx=5)
@@ -1014,34 +1018,43 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         # 设置默认模型
         model_map = {
             "qwen": "modelstudio/qwen3.5-plus",
+            "qianfan": "qianfan/ernie-4.0-8k",  # 百度千帆
             "glm": "modelstudio/glm-4.7",
             "kimi": "modelstudio/kimi-k2.5",
-            "openai": "openai/gpt-4o",
-            "minimax": "modelstudio/MiniMax-M2.5"
+            "deepseek": "deepseek/deepseek-chat",  # DeepSeek
+            "hunyuan": "hunyuan/hunyuan-lite",  # 腾讯混元
+            "doubao": "doubao/doubao-pro-32k",  # 字节豆包
+            "minimax": "modelstudio/MiniMax-M2.5",
+            "pangu": "pangu/pangu-nlp",  # 华为盘古
+            "yi": "yi/yi-large",  # 零一万物
+            "openai": "openai/gpt-4o"
         }
         
         default_model = model_map.get(provider_id, f"{provider_id}/default")
         
         try:
             # 设置模型
-            subprocess.run([openclaw_cmd, "config", "set", "agents.defaults.model.primary", default_model], 
-                          shell=True, capture_output=True)
+            result = subprocess.run([openclaw_cmd, "config", "set", "agents.defaults.model.primary", default_model], 
+                          shell=True, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                print(f"模型配置警告: {result.stderr}")
             
-            # 设置 API Key（通过环境变量或配置文件）
-            # 注意：openclaw 的 API Key 配置比较复杂，这里先写入环境变量
-            # 实际部署时可能需要使用 openclaw configure 交互式配置
+            # TODO: API Key 需要通过 openclaw configure 交互式配置
+            # 这里暂时跳过，让用户手动配置
             
         except Exception as e:
-            # 配置失败不影响安装，让用户手动配置
-            pass
+            print(f"配置警告: {e}")
     
     def install_service(self):
         """安装系统服务"""
-        # 启动 gateway
         try:
-            subprocess.run(["openclaw", "gateway", "start"], shell=True, capture_output=True)
-        except:
-            pass
+            # 先安装服务
+            subprocess.run(["openclaw", "gateway", "install"], shell=True, capture_output=True, timeout=60)
+            # 再启动服务
+            subprocess.run(["openclaw", "gateway", "start"], shell=True, capture_output=True, timeout=30)
+        except Exception as e:
+            # 如果失败，记录错误但不中断
+            print(f"服务安装警告: {e}")
     
     def show_finish(self):
         """显示完成页面"""

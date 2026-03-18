@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.3"
+VERSION = "3.2.4"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -690,22 +690,28 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         """创建完成页面"""
         frame = ttk.Frame(self.root, padding=40)
         
-        ttk.Label(frame, text="🎉 安装完成！", font=('Arial', 24, 'bold')).pack(pady=20)
+        ttk.Label(frame, text="🎉 安装完成！", font=(FONT_FAMILY, 24, 'bold')).pack(pady=20)
         
         # 访问信息
         info_frame = ttk.LabelFrame(frame, text="访问信息", padding=10)
         info_frame.pack(fill='x', pady=20)
         
-        ttk.Label(info_frame, text="访问地址：", font=('Arial', 11)).pack(anchor='w')
-        self.access_url = ttk.Label(info_frame, text=f"http://localhost:{DEFAULT_PORT}", font=('Arial', 12, 'bold'), foreground='blue')
+        ttk.Label(info_frame, text="访问地址：", font=(FONT_FAMILY, 11)).pack(anchor='w')
+        self.access_url = ttk.Label(info_frame, text=f"http://localhost:{DEFAULT_PORT}", font=(FONT_FAMILY, 12, 'bold'), foreground='blue')
         self.access_url.pack(anchor='w', pady=5)
         
-        ttk.Label(info_frame, text="", font=('Arial', 8)).pack()  # 空行
+        ttk.Label(info_frame, text="", font=(FONT_FAMILY, 8)).pack()  # 空行
+        
+        # Token 提示
+        ttk.Label(info_frame, text="访问令牌：", font=(FONT_FAMILY, 11)).pack(anchor='w')
+        self.token_label = ttk.Label(info_frame, text="安装时自动生成", font=(FONT_FAMILY, 10), foreground='gray')
+        self.token_label.pack(anchor='w', pady=5)
+        
+        ttk.Label(info_frame, text="", font=(FONT_FAMILY, 8)).pack()  # 空行
         
         # 提示：需要配置 API Key
-        ttk.Label(info_frame, text="⚠️ 重要提示：", font=('Arial', 11, 'bold'), foreground='orange').pack(anchor='w')
-        ttk.Label(info_frame, text="首次使用请运行以下命令配置 API Key：", font=('Arial', 10)).pack(anchor='w')
-        ttk.Label(info_frame, text="openclaw configure", font=('Arial', 11, 'bold'), foreground='blue').pack(anchor='w', pady=5)
+        ttk.Label(info_frame, text="⚠️ 如果还没配置 API Key，请运行：", font=(FONT_FAMILY, 10)).pack(anchor='w')
+        ttk.Label(info_frame, text="openclaw configure", font=(FONT_FAMILY, 11, 'bold'), foreground='blue').pack(anchor='w', pady=5)
         
         # 按钮
         btn_frame = ttk.Frame(info_frame)
@@ -723,7 +729,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         ttk.Button(btn_frame, text="打开浏览器", command=open_browser).pack(side='left', padx=5)
         
         # 提示
-        ttk.Label(frame, text="首次访问可能需要 1-2 分钟初始化", font=('Arial', 10), foreground='gray').pack(pady=10)
+        ttk.Label(frame, text="首次访问可能需要 1-2 分钟初始化", font=(FONT_FAMILY, 10), foreground='gray').pack(pady=10)
         
         # 完成按钮
         ttk.Button(frame, text="完成", command=self.quit).pack(pady=20)
@@ -1209,7 +1215,20 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             
             # 配置 gateway.mode
             subprocess.run([openclaw_cmd, "config", "set", "gateway.mode", "local"], shell=True, capture_output=True, timeout=30)
-            self.root.after(0, lambda: self.update_progress(92, "Gateway 模式配置完成 ✓"))
+            self.root.after(0, lambda: self.update_progress(91, "Gateway 模式配置完成 ✓"))
+            
+            # 1.5 生成 gateway.auth.token（必须！否则无法访问）
+            self.root.after(0, lambda: self.update_progress(91.5, "生成访问令牌..."))
+            
+            # 生成随机 token
+            import secrets
+            token = secrets.token_hex(16)
+            subprocess.run([openclaw_cmd, "config", "set", "gateway.auth.token", token], 
+                          shell=True, capture_output=True, timeout=30)
+            self.root.after(0, lambda: self.update_progress(92, "访问令牌生成完成 ✓"))
+            
+            # 保存 token 供后面使用
+            self.gateway_token = token
             
             # 2. 安装 PM2
             self.root.after(0, lambda: self.update_progress(93, "安装 PM2 进程管理器..."))
@@ -1261,26 +1280,27 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def show_finish(self):
         """显示完成页面"""
-        # 尝试获取 token
+        # 获取 token 并自动打开浏览器
         try:
-            result = subprocess.run(
-                ["openclaw", "config", "get", "gateway.auth.token"],
-                capture_output=True, text=True, shell=True, timeout=10
-            )
-            # token 输出可能是 __OPENCLAW_REDACTED__，需要从配置文件读取
-            if result.returncode == 0:
-                # 尝试打开配置文件获取 token
+            # 优先使用安装时生成的 token
+            if hasattr(self, 'gateway_token') and self.gateway_token:
+                token = self.gateway_token
+            else:
+                # 从配置文件读取
                 config_path = os.path.expanduser("~/.openclaw/openclaw.json")
                 if os.path.exists(config_path):
-                    import json
-                    with open(config_path, 'r') as f:
+                    with open(config_path, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                         token = config.get('gateway', {}).get('auth', {}).get('token', '')
-                        if token:
-                            # 自动打开浏览器带 token
-                            webbrowser.open(f"http://127.0.0.1:18789/#token={token}")
-        except:
-            pass
+                else:
+                    token = ''
+            
+            if token:
+                # 自动打开浏览器带 token
+                webbrowser.open(f"http://127.0.0.1:18789/#token={token}")
+                print(f"✓ 浏览器已打开，Token: {token[:8]}...")
+        except Exception as e:
+            print(f"打开浏览器失败: {e}")
         
         self.show_page(7)  # 完成页面
     

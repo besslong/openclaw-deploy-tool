@@ -13,6 +13,30 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: 诊断网络
+      run: |
+        echo "=== 网络诊断 ==="
+        curl -I --connect-timeout 10 https://github.com || echo "GitHub 连接失败"
+        curl -I --connect-timeout 10 https://npmmirror.com || echo "淘宝镜像连接失败"
+        nslookup github.com || echo "DNS 解析失败"
+      shell: bash
+
+    - name: 配置网络兼容性
+      run: |
+        git config --global http.sslVerify false
+        git config --global http.postBuffer 524288000
+        npm config set strict-ssl false
+        npm config set registry https://registry.npmmirror.com
+        npm config set sharp_binary_host https://npmmirror.com/mirrors/sharp
+        npm config set sharp_libvips_binary_host https://npmmirror.com/mirrors/sharp-libvips
+      shell: bash
+
+    - name: 使用国内镜像源加速
+      run: |
+        git config --global url."https://ghproxy.com/https://github.com/".insteadOf https://github.com/
+        git config --global url."https://ghproxy.com/https://raw.githubusercontent.com/".insteadOf https://raw.githubusercontent.com/
+      shell: bash
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -20,11 +44,18 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install pyinstaller requests
+        for i in {1..3}; do
+          echo "尝试安装依赖 ($i/3)..."
+          pip install -i https://pypi.tuna.tsinghua.edu.cn/simple pyinstaller requests && break || sleep 5
+        done
+      shell: bash
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --name "OpenClaw 一键部署工具" installer.py
+        for i in {1..3}; do
+          echo "尝试打包 ($i/3)..."
+          pyinstaller --onefile --windowed --name "OpenClaw 一键部署工具" installer.py && break || sleep 5
+        done
       shell: bash
 
     - name: Upload artifact

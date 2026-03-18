@@ -407,7 +407,7 @@ def deploy_local(local_info):
                                 print()
                                 
                                 # 配置 API Key
-                                config_api_key()
+                                config_api_key(system)
                                 
                                 print()
                                 print("   " + "=" * 50)
@@ -474,7 +474,7 @@ def deploy_local(local_info):
                 print("✅ OpenClaw 安装成功")
                 
                 # 配置 API Key
-                config_api_key()
+                config_api_key(system)
                 
                 print()
                 print("=" * 60)
@@ -499,13 +499,54 @@ def deploy_local(local_info):
     print("📚 文档：https://docs.openclaw.ai")
 
 
-def config_api_key():
+def config_api_key(system):
     """配置 AI 模型 API Key"""
     print()
     print("=" * 60)
     print("🔑 AI 模型配置")
     print("=" * 60)
     print()
+    
+    # 先检查 openclaw 是否可用（刚安装后 PATH 可能未更新）
+    openclaw_cmd = None
+    if system == "Windows":
+        # Windows 上尝试多个路径
+        possible_paths = [
+            r"C:\Program Files\nodejs\openclaw.cmd",
+            r"C:\Program Files (x86)\nodejs\openclaw.cmd",
+            os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
+            "openclaw"
+        ]
+        for path in possible_paths:
+            try:
+                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
+                if result.returncode == 0:
+                    openclaw_cmd = path
+                    break
+            except:
+                continue
+    else:
+        try:
+            result = subprocess.run(["openclaw", "--version"], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                openclaw_cmd = "openclaw"
+        except:
+            pass
+    
+    if not openclaw_cmd:
+        print("⚠️  检测到 OpenClaw 命令暂不可用")
+        print("   这是因为刚安装完成，系统环境变量还未更新")
+        print()
+        print("📌 请按以下步骤配置 API Key：")
+        print("   1. 关闭当前窗口")
+        print("   2. 重新打开命令提示符（管理员）")
+        print("   3. 运行: openclaw configure")
+        print()
+        print("支持的 AI 服务：")
+        print("  • 通义千问 (Qwen) - 推荐，国内稳定")
+        print("  • OpenAI (GPT-4) - 需要科学上网")
+        return False
+    
     print("OpenClaw 需要配置 AI 模型才能工作。")
     print()
     print("请选择要使用的 AI 服务：")
@@ -520,16 +561,109 @@ def config_api_key():
     print()
     
     while True:
-        choice = input("请选择 (1/2/3)：").strip()
-        if choice in ['1', '2', '3']:
+        try:
+            choice = input("请选择 (1/2/3)：").strip()
+            if choice in ['1', '2', '3']:
+                break
+            print("❌ 请输入 1、2 或 3")
+        except EOFError:
+            choice = '3'
             break
-        print("❌ 请输入 1、2 或 3")
     
     if choice == '3':
         print()
         print("📌 稍后可以运行以下命令配置：")
         print("   openclaw configure")
         return False
+    
+    print()
+    
+    if choice == '1':
+        # 通义千问
+        print("=" * 60)
+        print("📢 通义千问 (Qwen) 配置")
+        print("=" * 60)
+        print()
+        print("获取 API Key 步骤：")
+        print("  1. 访问：https://dashscope.console.aliyun.com/")
+        print("  2. 登录阿里云账号")
+        print("  3. 开通 DashScope 服务")
+        print("  4. 创建 API Key")
+        print()
+        
+        try:
+            api_key = input("请输入通义千问 API Key：").strip()
+        except EOFError:
+            api_key = ""
+        
+        if api_key:
+            print()
+            print("⏳ 正在配置...")
+            
+            # 配置 openclaw
+            try:
+                # 设置模型
+                subprocess.run([openclaw_cmd, "config", "set", "model", "qwen"], capture_output=True, shell=True)
+                # 设置 API Key
+                result = subprocess.run(
+                    [openclaw_cmd, "config", "set", "providers.qwen.apiKey", api_key],
+                    capture_output=True, text=True, shell=True
+                )
+                
+                if result.returncode == 0:
+                    print("✅ 通义千问 API Key 配置成功！")
+                    return True
+                else:
+                    print(f"⚠️  配置失败：{result.stderr}")
+                    print("   请稍后运行: openclaw configure")
+            except Exception as e:
+                print(f"⚠️  配置出错：{e}")
+                print("   请稍后运行: openclaw configure")
+        else:
+            print("⚠️  未输入 API Key")
+            print("   请稍后运行: openclaw configure")
+    
+    elif choice == '2':
+        # OpenAI
+        print("=" * 60)
+        print("📢 OpenAI 配置")
+        print("=" * 60)
+        print()
+        print("获取 API Key 步骤：")
+        print("  1. 访问：https://platform.openai.com/api-keys")
+        print("  2. 登录 OpenAI 账号")
+        print("  3. 创建 API Key")
+        print()
+        print("⚠️  注意：使用 OpenAI 需要科学上网")
+        print()
+        
+        try:
+            api_key = input("请输入 OpenAI API Key：").strip()
+        except EOFError:
+            api_key = ""
+        
+        if api_key:
+            print()
+            print("⏳ 正在配置...")
+            
+            try:
+                subprocess.run([openclaw_cmd, "config", "set", "model", "openai"], capture_output=True, shell=True)
+                result = subprocess.run(
+                    [openclaw_cmd, "config", "set", "providers.openai.apiKey", api_key],
+                    capture_output=True, text=True, shell=True
+                )
+                
+                if result.returncode == 0:
+                    print("✅ OpenAI API Key 配置成功！")
+                    return True
+                else:
+                    print(f"⚠️  配置失败：{result.stderr}")
+            except Exception as e:
+                print(f"⚠️  配置出错：{e}")
+        else:
+            print("⚠️  未输入 API Key")
+    
+    return False
     
     print()
     

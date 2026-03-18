@@ -965,23 +965,28 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         # 安装 openclaw（使用淘宝镜像）
         self.root.after(0, lambda: self.update_progress(50, "正在下载 OpenClaw..."))
-        self.root.after(0, lambda: self.update_progress(52, "使用国内镜像加速下载..."))
+        self.root.after(0, lambda: self.update_progress(52, "使用淘宝镜像加速下载..."))
         
-        result = subprocess.run(
-            [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
-            capture_output=True, text=True, shell=True, timeout=300  # 5 分钟超时
-        )
-        
-        if result.returncode != 0:
-            # 如果失败，尝试官方源
-            self.root.after(0, lambda: self.update_progress(55, "淘宝镜像失败，尝试官方源..."))
+        # 多次尝试淘宝镜像（不要用官方源，国内会卡死）
+        max_retries = 3
+        for retry in range(max_retries):
+            self.root.after(0, lambda r=retry: self.update_progress(52 + r*5, f"下载中... (尝试 {r+1}/{max_retries})"))
+            
             result = subprocess.run(
-                [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmjs.org"],
-                capture_output=True, text=True, shell=True, timeout=600  # 10 分钟超时
+                [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
+                capture_output=True, text=True, shell=True, timeout=300  # 5 分钟超时
             )
+            
+            if result.returncode == 0:
+                break  # 成功
+            
+            if retry < max_retries - 1:
+                self.root.after(0, lambda: self.update_progress(55, "下载失败，重试中..."))
+                import time
+                time.sleep(3)  # 等待 3 秒重试
         
         if result.returncode != 0:
-            raise Exception(f"OpenClaw 安装失败：{result.stderr[:500]}")
+            raise Exception(f"OpenClaw 下载失败（尝试了 {max_retries} 次）。\n请手动执行：npm install -g openclaw --registry https://registry.npmmirror.com\n错误信息：{result.stderr[:300]}")
     
     def configure_api_key(self):
         """配置 API Key"""

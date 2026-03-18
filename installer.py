@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.7"
+VERSION = "3.2.8"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -731,7 +731,9 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         ttk.Button(btn_frame, text="打开浏览器", command=open_browser).pack(side='left', padx=5)
         
         # 提示
-        ttk.Label(frame, text="首次访问可能需要 1-2 分钟初始化", font=(FONT_FAMILY, 10), foreground='gray').pack(pady=10)
+        ttk.Label(frame, text="安装完成！服务已启动。", font=(FONT_FAMILY, 11, 'bold'), foreground='green').pack(pady=5)
+        ttk.Label(frame, text="如果浏览器暂时打不开，请等待1-2分钟后再试。", font=(FONT_FAMILY, 10), foreground='gray').pack(pady=2)
+        ttk.Label(frame, text="这是正常的系统延迟，不是安装失败。", font=(FONT_FAMILY, 10), foreground='gray').pack(pady=2)
         
         # 完成按钮
         ttk.Button(frame, text="完成", command=self.quit).pack(pady=20)

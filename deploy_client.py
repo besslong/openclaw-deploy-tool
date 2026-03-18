@@ -653,25 +653,48 @@ def install_git_windows():
     except:
         pass
     
-    # 方法3: 下载安装包
+    # 方法3: 下载安装包（使用国内镜像）
     print("   📥 正在下载 Git 安装包...")
-    git_url = "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/Git-2.47.1-64-bit.exe"
+    print("   使用国内镜像加速下载...")
+    
+    # 使用国内镜像
+    git_mirrors = [
+        ("https://mirrors.huaweicloud.com/git-for-windows/v2.47.1.windows.1/Git-2.47.1-64-bit.exe", "华为云镜像"),
+        ("https://npmmirror.com/mirrors/git-for-windows/v2.47.1.windows.1/Git-2.47.1-64-bit.exe", "淘宝镜像"),
+        ("https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/Git-2.47.1-64-bit.exe", "GitHub官方"),
+    ]
+    
     installer_path = os.path.join(os.environ.get("TEMP", "."), "git_installer.exe")
+    download_success = False
     
-    try:
-        download_cmd = f'powershell -Command "Invoke-WebRequest -Uri \'{git_url}\' -OutFile \'{installer_path}\'"'
-        os.system(download_cmd)
-        
-        if os.path.exists(installer_path):
-            print("   ✅ 下载完成，正在启动安装程序...")
-            print("   ⚠️  请在弹出的安装窗口中完成安装（全部点 Next 即可）")
-            os.system(f'"{installer_path}"')
-            return True
-    except Exception as e:
-        print(f"   ❌ Git 安装失败：{e}")
+    for git_url, mirror_name in git_mirrors:
+        print(f"   尝试 {mirror_name}...")
+        try:
+            download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{git_url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
+            result = os.system(download_cmd)
+            
+            if os.path.exists(installer_path) and os.path.getsize(installer_path) > 10000000:  # 至少 10MB
+                print(f"   ✅ 从 {mirror_name} 下载成功")
+                download_success = True
+                break
+            else:
+                print(f"   ⚠️  {mirror_name} 下载失败，尝试下一个...")
+        except Exception as e:
+            print(f"   ⚠️  {mirror_name} 失败: {e}")
     
-    print("   请手动下载安装 Git：https://git-scm.com/download/win")
-    return False
+    if download_success and os.path.exists(installer_path):
+        print("   ✅ 下载完成，正在启动安装程序...")
+        print("   ⚠️  请在弹出的安装窗口中完成安装")
+        print("   提示：安装选项全部默认即可，一路点 Next")
+        os.system(f'"{installer_path}"')
+        return True
+    else:
+        print("   ❌ 自动下载失败")
+        print()
+        print("   请手动下载安装 Git：")
+        print("   华为镜像：https://mirrors.huaweicloud.com/git-for-windows/")
+        print("   淘宝镜像：https://npmmirror.com/mirrors/git-for-windows/")
+        print("   官网：https://git-scm.com/download/win")
 
 
 def install_nodejs(system):
@@ -716,33 +739,48 @@ def install_nodejs(system):
         except FileNotFoundError:
             pass
         
-        # 方法3: 下载安装包
+        # 方法3: 下载安装包（使用国内镜像）
         print("   📥 正在下载 Node.js 安装包...")
-        print("   ⏳ 请稍候...")
+        print("   使用国内镜像加速下载...")
         
-        nodejs_url = "https://nodejs.org/dist/v20.18.1/node-v20.18.1-x64.msi"
+        nodejs_mirrors = [
+            ("https://npmmirror.com/mirrors/node/v20.18.1/node-v20.18.1-x64.msi", "淘宝镜像"),
+            ("https://mirrors.huaweicloud.com/nodejs/v20.18.1/node-v20.18.1-x64.msi", "华为云镜像"),
+            ("https://nodejs.org/dist/v20.18.1/node-v20.18.1-x64.msi", "Node.js官方"),
+        ]
+        
         installer_path = os.path.join(os.environ.get("TEMP", "."), "nodejs_installer.msi")
+        download_success = False
         
-        try:
-            # 使用 PowerShell 下载
-            download_cmd = f'powershell -Command "Invoke-WebRequest -Uri \'{nodejs_url}\' -OutFile \'{installer_path}\'"'
-            os.system(download_cmd)
-            
-            if os.path.exists(installer_path):
-                print("   ✅ 下载完成，正在启动安装程序...")
-                print("   ⚠️  请在弹出的安装窗口中完成安装")
-                os.system(f'msiexec /i "{installer_path}"')
-                return True
-            else:
-                print("   ❌ 下载失败")
-        except Exception as e:
-            print(f"   ❌ 自动安装失败：{e}")
+        for nodejs_url, mirror_name in nodejs_mirrors:
+            print(f"   尝试 {mirror_name}...")
+            try:
+                download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{nodejs_url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
+                result = os.system(download_cmd)
+                
+                if os.path.exists(installer_path) and os.path.getsize(installer_path) > 20000000:  # 至少 20MB
+                    print(f"   ✅ 从 {mirror_name} 下载成功")
+                    download_success = True
+                    break
+                else:
+                    # 删除不完整的文件
+                    if os.path.exists(installer_path):
+                        os.remove(installer_path)
+                    print(f"   ⚠️  {mirror_name} 下载失败，尝试下一个...")
+            except Exception as e:
+                print(f"   ⚠️  {mirror_name} 失败: {e}")
         
-        # 方法4: 打开下载页面
-        print()
-        print("   自动安装失败，请手动下载：")
-        print("   https://nodejs.org/")
-        return False
+        if download_success:
+            print("   ✅ 下载完成，正在启动安装程序...")
+            print("   ⚠️  请在弹出的安装窗口中完成安装")
+            os.system(f'msiexec /i "{installer_path}"')
+            return True
+        else:
+            print("   ❌ 自动下载失败")
+            print()
+            print("   请手动下载安装 Node.js：")
+            print("   淘宝镜像：https://npmmirror.com/mirrors/node/")
+            print("   官网：https://nodejs.org/")
     
     return True
 

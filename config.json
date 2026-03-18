@@ -1,0 +1,5 @@
+{
+  "verify_server": "http://180.76.100.92:5000/api/verify",
+  "deploy_script_url": "https://你的域名.com/deploy.sh",
+  "version": "1.0.0"
+}

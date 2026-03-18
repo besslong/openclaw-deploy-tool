@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.1.3"
+VERSION = "3.2.0"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1100,16 +1100,105 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     def install_service(self):
         """安装系统服务"""
         try:
-            # 先安装服务
-            subprocess.run(["openclaw", "gateway", "install"], shell=True, capture_output=True, timeout=60)
-            # 再启动服务
-            subprocess.run(["openclaw", "gateway", "start"], shell=True, capture_output=True, timeout=30)
+            # 1. 先配置 gateway.mode（必须先配置，否则 gateway 无法启动）
+            self.root.after(0, lambda: self.update_progress(91, "配置 Gateway 模式..."))
+            
+            # 查找 openclaw 命令路径
+            openclaw_paths = [
+                r"C:\Program Files\nodejs\openclaw.cmd",
+                os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
+                "openclaw"
+            ]
+            
+            openclaw_cmd = None
+            for path in openclaw_paths:
+                try:
+                    result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
+                    if result.returncode == 0:
+                        openclaw_cmd = path
+                        break
+                except:
+                    continue
+            
+            if not openclaw_cmd:
+                self.root.after(0, lambda: self.update_progress(92, "⚠️ 未找到 openclaw 命令，跳过服务配置"))
+                return
+            
+            # 配置 gateway.mode
+            subprocess.run([openclaw_cmd, "config", "set", "gateway.mode", "local"], shell=True, capture_output=True, timeout=30)
+            self.root.after(0, lambda: self.update_progress(92, "Gateway 模式配置完成 ✓"))
+            
+            # 2. 安装 PM2
+            self.root.after(0, lambda: self.update_progress(93, "安装 PM2 进程管理器..."))
+            
+            npm_paths = [
+                r"C:\Program Files\nodejs\npm.cmd",
+                os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
+                "npm"
+            ]
+            
+            npm_cmd = None
+            for path in npm_paths:
+                try:
+                    result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
+                    if result.returncode == 0:
+                        npm_cmd = path
+                        break
+                except:
+                    continue
+            
+            if npm_cmd:
+                subprocess.run([npm_cmd, "install", "-g", "pm2", "--registry", "https://registry.npmmirror.com"], 
+                              shell=True, capture_output=True, timeout=120)
+                self.root.after(0, lambda: self.update_progress(94, "PM2 安装完成 ✓"))
+            
+            # 3. 用 PM2 启动 OpenClaw（使用官方命令）
+            self.root.after(0, lambda: self.update_progress(95, "启动 OpenClaw 服务..."))
+            
+            # 使用官方命令，不写死路径
+            subprocess.run([
+                "pm2", "start", openclaw_cmd,
+                "--name", "openclaw",
+                "--interpreter", "none",
+                "--", "gateway"
+            ], shell=True, capture_output=True, timeout=60)
+            
+            # 4. 保存 PM2 进程列表
+            subprocess.run(["pm2", "save"], shell=True, capture_output=True, timeout=30)
+            self.root.after(0, lambda: self.update_progress(97, "OpenClaw 服务启动成功 ✓"))
+            
+            # 5. 创建开机自启任务（Windows 任务计划程序）
+            self.root.after(0, lambda: self.update_progress(98, "配置开机自启..."))
+            schtasks_cmd = 'schtasks /create /tn "OpenClaw PM2" /tr "pm2 resurrect" /sc onstart /rl highest /f'
+            subprocess.run(schtasks_cmd, shell=True, capture_output=True, timeout=30)
+            self.root.after(0, lambda: self.update_progress(99, "开机自启配置完成 ✓"))
+            
         except Exception as e:
-            # 如果失败，记录错误但不中断
             print(f"服务安装警告: {e}")
     
     def show_finish(self):
         """显示完成页面"""
+        # 尝试获取 token
+        try:
+            result = subprocess.run(
+                ["openclaw", "config", "get", "gateway.auth.token"],
+                capture_output=True, text=True, shell=True, timeout=10
+            )
+            # token 输出可能是 __OPENCLAW_REDACTED__，需要从配置文件读取
+            if result.returncode == 0:
+                # 尝试打开配置文件获取 token
+                config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+                if os.path.exists(config_path):
+                    import json
+                    with open(config_path, 'r') as f:
+                        config = json.load(f)
+                        token = config.get('gateway', {}).get('auth', {}).get('token', '')
+                        if token:
+                            # 自动打开浏览器带 token
+                            webbrowser.open(f"http://127.0.0.1:18789/#token={token}")
+        except:
+            pass
+        
         self.show_page(7)  # 完成页面
     
     def show_error(self, msg):

@@ -816,9 +816,9 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     def validate_api_key(self):
         """验证 API Key"""
         key = self.api_key.get().strip()
-        provider = self.provider.get()
+        provider_id = self.provider.get()  # 获取 provider_id（如 qianfan）
         
-        if not provider:
+        if not provider_id:
             messagebox.showwarning("提示", "请先选择服务商")
             return
         
@@ -826,11 +826,12 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             self.apikey_status.config(text="请输入 API Key", foreground='red')
             return
         
-        config = self.providers.get(provider, {})
+        # 从 PROVIDER_MODELS 获取配置
+        provider_config = PROVIDER_MODELS.get(provider_id, {})
         
-        # 检查长度
-        if len(key) < config.get('key_length', 32):
-            self.apikey_status.config(text=f"⚠️ API Key 长度可能不正确（建议 {config.get('key_length', 32)} 位）", foreground='orange')
+        # 简单验证：长度检查（至少 20 个字符）
+        if len(key) < 20:
+            self.apikey_status.config(text="⚠️ API Key 长度可能不正确", foreground='orange')
         else:
             self.apikey_status.config(text="✓ API Key 格式正确", foreground='green')
         
@@ -840,7 +841,11 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         """开始安装"""
         # 更新确认信息
         self.confirm_path.config(text=f"安装路径：{self.install_path.get()}")
-        self.confirm_provider.config(text=f"服务商：{self.provider.get()}")
+        
+        # 显示服务商中文名称
+        provider_id = self.provider.get()
+        provider_name = PROVIDER_MODELS.get(provider_id, {}).get("name", provider_id)
+        self.confirm_provider.config(text=f"服务商：{provider_name}")
         
         # 隐藏 API Key 中间部分
         key = self.api_key.get()

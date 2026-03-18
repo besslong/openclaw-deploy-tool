@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.0.5"
+VERSION = "3.1.2"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -592,7 +592,14 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         """创建安装进度页面"""
         frame = ttk.Frame(self.root, padding=40)
         
-        ttk.Label(frame, text="⏳ 正在安装...", font=('Arial', 18, 'bold')).pack(pady=20)
+        # 标题（带动画沙漏）
+        self.hourglass_label = ttk.Label(frame, text="⏳ 正在安装...", font=('Arial', 18, 'bold'))
+        self.hourglass_label.pack(pady=20)
+        
+        # 启动沙漏动画
+        self.hourglass_chars = ["⏳", "⌛"]
+        self.hourglass_index = 0
+        self.animate_hourglass()
         
         # 进度条
         self.progress_bar = ttk.Progressbar(frame, length=400, mode='determinate', variable=self.install_progress)
@@ -611,17 +618,24 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         steps_frame.pack(fill='x', pady=20)
         
         for i, step in enumerate(self.install_steps):
-            label = ttk.Label(steps_frame, text=f"{'✓' if i == 0 else '○'} {step}", font=('Arial', 10))
+            label = ttk.Label(steps_frame, text=f"○ {step}", font=('Arial', 10))
             label.pack(anchor='w', pady=2)
         
-        # 按钮
+        # 按钮（固定在底部）
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(side='bottom', fill='x', pady=20)
         
-        cancel_btn = ttk.Button(btn_frame, text="取消安装", command=self.cancel_install)
-        cancel_btn.pack(side='right', padx=5)
+        ttk.Button(btn_frame, text="取消安装", command=self.cancel_install).pack(side='right', padx=5)
         
         return frame
+    
+    def animate_hourglass(self):
+        """沙漏动画"""
+        if hasattr(self, 'hourglass_label') and self.hourglass_label.winfo_exists():
+            self.hourglass_index = (self.hourglass_index + 1) % len(self.hourglass_chars)
+            char = self.hourglass_chars[self.hourglass_index]
+            self.hourglass_label.config(text=f"{char} 正在安装...")
+            self.root.after(500, self.animate_hourglass)
     
     def create_finish_page(self):
         """创建完成页面"""
@@ -685,13 +699,13 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         ttk.Label(reasons_frame, text="• 杀毒软件拦截", font=('Arial', 10)).pack(anchor='w')
         ttk.Label(reasons_frame, text="• GitHub 访问受限（国内）", font=('Arial', 10)).pack(anchor='w')
         
-        # 按钮
+        # 按钮（固定在底部）
         btn_frame = ttk.Frame(frame)
-        btn_frame.pack(pady=20)
+        btn_frame.pack(side='bottom', fill='x', pady=20)
         
         ttk.Button(btn_frame, text="查看日志", command=self.show_log).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="重试", command=self.retry_install).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="退出", command=self.quit).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="退出", command=self.quit).pack(side='right', padx=5)
         
         return frame
     
@@ -859,17 +873,22 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         """安装 Node.js"""
         # 检查是否已安装
         try:
-            result = subprocess.run(["node", "--version"], capture_output=True, text=True, shell=True)
+            result = subprocess.run(["node", "--version"], capture_output=True, text=True, shell=True, timeout=5)
             if result.returncode == 0:
                 version = result.stdout.strip()
-                # 检查版本是否 >= 22.12
+                # 检查版本是否 >= 22
                 major = int(version.replace('v', '').split('.')[0])
                 if major >= 22:
+                    self.root.after(0, lambda: self.update_progress(20, f"Node.js {version} 已安装 ✓"))
                     return  # 已安装正确版本
+                else:
+                    # 版本过低，需要升级
+                    self.root.after(0, lambda: self.update_progress(15, f"Node.js {version} 版本过低，需要升级到 v22..."))
         except:
-            pass
+            pass  # 未安装，继续安装
         
         # 下载并安装 Node.js v22
+        self.root.after(0, lambda: self.update_progress(16, "正在下载 Node.js v22..."))
         nodejs_mirrors = [
             "https://npmmirror.com/mirrors/node/v22.14.0/node-v22.14.0-x64.msi",
             "https://mirrors.huaweicloud.com/nodejs/v22.14.0/node-v22.14.0-x64.msi"
@@ -879,9 +898,19 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         for url in nodejs_mirrors:
             try:
-                # 使用 PowerShell 下载
                 download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
-                subprocess.run(download_cmd, shell=True, check=True)
+                subprocess.run(download_cmd, shell=True, check=True, timeout=120)
+                
+                if os.path.exists(installer_path) and os.path.getsize(installer_path) > 20000000:
+                    self.root.after(0, lambda: self.update_progress(20, "正在安装 Node.js..."))
+                    # 静默安装
+                    subprocess.run(f'msiexec /i "{installer_path}" /quiet /norestart', shell=True, check=True, timeout=300)
+                    self.root.after(0, lambda: self.update_progress(25, "Node.js 安装完成 ✓"))
+                    return
+            except Exception as e:
+                continue
+        
+        raise Exception("Node.js 安装失败，请手动安装 v22 或更高版本")
                 
                 if os.path.exists(installer_path) and os.path.getsize(installer_path) > 20000000:
                     # 静默安装
@@ -896,21 +925,28 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         """安装 Git"""
         # 检查是否已安装
         try:
-            result = subprocess.run(["git", "--version"], capture_output=True, text=True, shell=True)
+            result = subprocess.run(["git", "--version"], capture_output=True, text=True, shell=True, timeout=5)
             if result.returncode == 0:
+                self.root.after(0, lambda: self.update_progress(35, "Git 已安装 ✓"))
                 return  # 已安装
         except:
             pass
         
         # 使用 winget 安装
+        self.root.after(0, lambda: self.update_progress(30, "正在安装 Git..."))
         try:
-            subprocess.run(["winget", "install", "Git.Git", "--accept-source-agreements", "--accept-package-agreements"], 
-                          shell=True, check=True, capture_output=True)
-            return
+            result = subprocess.run(
+                ["winget", "install", "Git.Git", "--accept-source-agreements", "--accept-package-agreements"],
+                shell=True, capture_output=True, text=True, timeout=180
+            )
+            if result.returncode == 0:
+                self.root.after(0, lambda: self.update_progress(35, "Git 安装完成 ✓"))
+                return
         except:
             pass
         
         # 下载安装包
+        self.root.after(0, lambda: self.update_progress(31, "正在下载 Git 安装包..."))
         git_mirrors = [
             "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",
             "https://mirrors.huaweicloud.com/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe"
@@ -921,13 +957,15 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         for url in git_mirrors:
             try:
                 download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
-                subprocess.run(download_cmd, shell=True, check=True)
+                subprocess.run(download_cmd, shell=True, check=True, timeout=120)
                 
                 if os.path.exists(installer_path) and os.path.getsize(installer_path) > 10000000:
+                    self.root.after(0, lambda: self.update_progress(33, "正在安装 Git..."))
                     # 静默安装
-                    subprocess.run(f'"{installer_path}" /VERYSILENT /NORESTART', shell=True, check=True)
+                    subprocess.run(f'"{installer_path}" /VERYSILENT /NORESTART', shell=True, check=True, timeout=300)
+                    self.root.after(0, lambda: self.update_progress(35, "Git 安装完成 ✓"))
                     return
-            except:
+            except Exception as e:
                 continue
         
         raise Exception("Git 安装失败，请手动安装")
@@ -937,6 +975,18 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         # 创建安装目录
         install_dir = self.install_path.get()
         os.makedirs(install_dir, exist_ok=True)
+        
+        # 检查是否已安装正确版本
+        self.root.after(0, lambda: self.update_progress(42, "检查 OpenClaw 安装状态..."))
+        
+        try:
+            result = subprocess.run(["openclaw", "--version"], capture_output=True, text=True, shell=True, timeout=10)
+            if result.returncode == 0:
+                version = result.stdout.strip().split()[1] if len(result.stdout.strip().split()) > 1 else "unknown"
+                self.root.after(0, lambda: self.update_progress(70, f"OpenClaw {version} 已安装 ✓"))
+                return
+        except:
+            pass  # 未安装，继续安装
         
         # 查找 npm
         npm_paths = [
@@ -959,34 +1009,40 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         if not npm_cmd:
             raise Exception("找不到 npm，请确保 Node.js 已正确安装")
         
+        # 清理可能存在的旧版本/残留
+        self.root.after(0, lambda: self.update_progress(44, "清理旧版本残留..."))
+        subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], shell=True, capture_output=True, timeout=30)
+        subprocess.run([npm_cmd, "cache", "clean", "--force"], shell=True, capture_output=True, timeout=60)
+        
         # 设置 npm 镜像（加速下载）
         self.root.after(0, lambda: self.update_progress(48, "配置 npm 淘宝镜像..."))
         subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True, capture_output=True)
         
         # 安装 openclaw（使用淘宝镜像）
         self.root.after(0, lambda: self.update_progress(50, "正在下载 OpenClaw..."))
-        self.root.after(0, lambda: self.update_progress(52, "使用淘宝镜像加速下载..."))
         
-        # 多次尝试淘宝镜像（不要用官方源，国内会卡死）
+        # 多次尝试淘宝镜像
         max_retries = 3
         for retry in range(max_retries):
             self.root.after(0, lambda r=retry: self.update_progress(52 + r*5, f"下载中... (尝试 {r+1}/{max_retries})"))
             
             result = subprocess.run(
                 [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
-                capture_output=True, text=True, shell=True, timeout=300  # 5 分钟超时
+                capture_output=True, text=True, shell=True, timeout=300
             )
             
             if result.returncode == 0:
-                break  # 成功
+                break
             
             if retry < max_retries - 1:
                 self.root.after(0, lambda: self.update_progress(55, "下载失败，重试中..."))
                 import time
-                time.sleep(3)  # 等待 3 秒重试
+                time.sleep(3)
         
         if result.returncode != 0:
-            raise Exception(f"OpenClaw 下载失败（尝试了 {max_retries} 次）。\n请手动执行：npm install -g openclaw --registry https://registry.npmmirror.com\n错误信息：{result.stderr[:300]}")
+            raise Exception(f"OpenClaw 下载失败。请手动执行：\nnpm install -g openclaw --registry https://registry.npmmirror.com")
+        
+        self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
     
     def configure_api_key(self):
         """配置 API Key"""
@@ -1063,11 +1119,6 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def show_finish(self):
         """显示完成页面"""
-        # 生成访问令牌
-        import secrets
-        token = secrets.token_hex(16)
-        self.access_token.config(text=token)
-        
         self.show_page(7)  # 完成页面
     
     def show_error(self, msg):

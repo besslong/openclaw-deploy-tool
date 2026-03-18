@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.6"
+VERSION = "3.2.7"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -696,22 +696,20 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         info_frame = ttk.LabelFrame(frame, text="访问信息", padding=10)
         info_frame.pack(fill='x', pady=20)
         
+        # Token 会动态更新
+        self.finish_token = ""
         ttk.Label(info_frame, text="访问地址：", font=(FONT_FAMILY, 11)).pack(anchor='w')
-        self.access_url = ttk.Label(info_frame, text=f"http://localhost:{DEFAULT_PORT}", font=(FONT_FAMILY, 12, 'bold'), foreground='blue')
+        self.access_url = ttk.Label(info_frame, text="http://127.0.0.1:18789/#token=...", font=(FONT_FAMILY, 12, 'bold'), foreground='blue')
         self.access_url.pack(anchor='w', pady=5)
         
         ttk.Label(info_frame, text="", font=(FONT_FAMILY, 8)).pack()  # 空行
         
-        # Token 提示
-        ttk.Label(info_frame, text="访问令牌：", font=(FONT_FAMILY, 11)).pack(anchor='w')
-        self.token_label = ttk.Label(info_frame, text="安装时自动生成", font=(FONT_FAMILY, 10), foreground='gray')
-        self.token_label.pack(anchor='w', pady=5)
+        # 重要提示
+        ttk.Label(info_frame, text="⚠️ 注意：", font=(FONT_FAMILY, 10, 'bold'), foreground='orange').pack(anchor='w')
+        ttk.Label(info_frame, text="直接访问 http://localhost:18789/ 会提示'拒绝连接'", font=(FONT_FAMILY, 10)).pack(anchor='w')
+        ttk.Label(info_frame, text="这是 OpenClaw 的安全机制，请务必使用上面带 #token= 的完整地址", font=(FONT_FAMILY, 10)).pack(anchor='w')
         
         ttk.Label(info_frame, text="", font=(FONT_FAMILY, 8)).pack()  # 空行
-        
-        # 提示：需要配置 API Key
-        ttk.Label(info_frame, text="⚠️ 如果还没配置 API Key，请运行：", font=(FONT_FAMILY, 10)).pack(anchor='w')
-        ttk.Label(info_frame, text="openclaw configure", font=(FONT_FAMILY, 11, 'bold'), foreground='blue').pack(anchor='w', pady=5)
         
         # 按钮
         btn_frame = ttk.Frame(info_frame)
@@ -719,11 +717,15 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         def copy_url():
             self.root.clipboard_clear()
-            self.root.clipboard_append(f"http://localhost:{DEFAULT_PORT}")
+            url = f"http://127.0.0.1:18789/#token={self.finish_token}" if self.finish_token else f"http://127.0.0.1:18789"
+            self.root.clipboard_append(url)
             messagebox.showinfo("提示", "地址已复制到剪贴板")
         
         def open_browser():
-            webbrowser.open(f"http://localhost:{DEFAULT_PORT}")
+            if self.finish_token:
+                webbrowser.open(f"http://127.0.0.1:18789/#token={self.finish_token}")
+            else:
+                webbrowser.open("http://127.0.0.1:18789")
         
         ttk.Button(btn_frame, text="复制地址", command=copy_url).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="打开浏览器", command=open_browser).pack(side='left', padx=5)
@@ -1358,14 +1360,32 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                               shell=True, capture_output=True, timeout=120)
                 self.root.after(0, lambda: self.update_progress(94, "PM2 安装完成 ✓"))
             
-            # 3. 用 PM2 启动 OpenClaw（正确的命令格式）
+            # 3. 用 PM2 启动 OpenClaw（使用绝对路径）
             self.root.after(0, lambda: self.update_progress(95, "启动 OpenClaw 服务..."))
             
-            # 关键：直接用 openclaw 命令（不是路径），让 PM2 从 PATH 找
+            # 使用绝对路径启动，避免 PM2 找错版本
+            openclaw_js = os.path.join(os.environ.get('APPDATA', ''), 'npm', 'node_modules', 'openclaw', 'dist', 'index.js')
+            openclaw_cwd = os.path.expanduser('~/.openclaw')
+            
+            # 确保 openclaw_js 存在
+            if not os.path.exists(openclaw_js):
+                # 尝试其他路径
+                alt_paths = [
+                    os.path.join(os.environ.get('LOCALAPPDATA', ''), 'npm', 'node_modules', 'openclaw', 'dist', 'index.js'),
+                    os.path.join(os.environ.get('USERPROFILE', ''), 'AppData', 'Roaming', 'npm', 'node_modules', 'openclaw', 'dist', 'index.js'),
+                ]
+                for alt in alt_paths:
+                    if os.path.exists(alt):
+                        openclaw_js = alt
+                        break
+            
+            print(f"启动路径: {openclaw_js}")
+            print(f"工作目录: {openclaw_cwd}")
+            
             result = subprocess.run([
-                "pm2", "start", "openclaw",
+                "pm2", "start", openclaw_js,
+                "--cwd", openclaw_cwd,
                 "--name", "openclaw",
-                "--interpreter", "none",
                 "--", "gateway"
             ], shell=True, capture_output=True, text=True, timeout=60)
             
@@ -1393,7 +1413,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def show_finish(self):
         """显示完成页面"""
-        # 获取 token 并自动打开浏览器
+        # 获取 token 并更新显示
         try:
             # 优先使用安装时生成的 token
             if hasattr(self, 'gateway_token') and self.gateway_token:
@@ -1408,12 +1428,16 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 else:
                     token = ''
             
+            # 更新完成页面的 token
+            self.finish_token = token
             if token:
+                self.access_url.config(text=f"http://127.0.0.1:18789/#token={token[:8]}...")
+                
                 # 自动打开浏览器带 token
                 webbrowser.open(f"http://127.0.0.1:18789/#token={token}")
                 print(f"✓ 浏览器已打开，Token: {token[:8]}...")
         except Exception as e:
-            print(f"打开浏览器失败: {e}")
+            print(f"获取 token 失败: {e}")
         
         self.show_page(7)  # 完成页面
     

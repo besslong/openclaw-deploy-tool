@@ -392,14 +392,25 @@ def deploy_local(local_info):
                             if version.startswith('2026'):
                                 print(f"   ✅ OpenClaw {version} 安装成功！")
                                 print()
+                                
+                                # 配置 API Key
+                                config_api_key()
+                                
+                                print()
                                 print("   " + "=" * 50)
-                                print("   🎉 接下来的步骤：")
+                                print("   🎉 安装完成！")
                                 print("   " + "=" * 50)
+                                print()
+                                print("   启动步骤：")
                                 print("   1. 关闭当前窗口")
-                                print("   2. 打开新的命令提示符（以管理员身份运行）")
-                                print("   3. 运行: openclaw setup")
-                                print("   4. 运行: openclaw gateway start")
-                                print("   5. 访问: http://localhost:18788")
+                                print("   2. 打开新的命令提示符（管理员）")
+                                print("   3. 运行: openclaw gateway start")
+                                print("   4. 访问: http://localhost:18788")
+                                print()
+                                print("   常用命令：")
+                                print("   • 查看状态: openclaw status")
+                                print("   • 配置模型: openclaw configure")
+                                print("   • 查看帮助: openclaw --help")
                                 print()
                             else:
                                 # 版本不对，尝试其他方法
@@ -444,7 +455,25 @@ def deploy_local(local_info):
             capture_output=True, text=True
         )
         if result.returncode == 0:
-            print("✅ OpenClaw 安装成功")
+            # 验证版本
+            verify_result = subprocess.run(["npm", "list", "-g", "openclaw"], capture_output=True, text=True)
+            if "2026" in verify_result.stdout:
+                print("✅ OpenClaw 安装成功")
+                
+                # 配置 API Key
+                config_api_key()
+                
+                print()
+                print("=" * 60)
+                print("🎉 安装完成！")
+                print("=" * 60)
+                print()
+                print("启动步骤：")
+                print("  1. 运行: openclaw gateway start")
+                print("  2. 访问: http://localhost:18788")
+                print()
+            else:
+                print("⚠️  版本验证失败，请手动检查")
         else:
             print(f"❌ 安装失败：{result.stderr}")
     
@@ -455,6 +484,122 @@ def deploy_local(local_info):
     print()
     print("📋 访问地址：http://localhost:18788")
     print("📚 文档：https://docs.openclaw.ai")
+
+
+def config_api_key():
+    """配置 AI 模型 API Key"""
+    print()
+    print("=" * 60)
+    print("🔑 AI 模型配置")
+    print("=" * 60)
+    print()
+    print("OpenClaw 需要配置 AI 模型才能工作。")
+    print()
+    print("请选择要使用的 AI 服务：")
+    print()
+    print("  1️⃣  通义千问 (Qwen) - 推荐，国内访问稳定")
+    print("      价格便宜，中文效果好")
+    print()
+    print("  2️⃣  OpenAI (GPT-4)")
+    print("      需要科学上网")
+    print()
+    print("  3️⃣  跳过，稍后手动配置")
+    print()
+    
+    while True:
+        choice = input("请选择 (1/2/3)：").strip()
+        if choice in ['1', '2', '3']:
+            break
+        print("❌ 请输入 1、2 或 3")
+    
+    if choice == '3':
+        print()
+        print("📌 稍后可以运行以下命令配置：")
+        print("   openclaw configure")
+        return False
+    
+    print()
+    
+    if choice == '1':
+        # 通义千问
+        print("=" * 60)
+        print("📢 通义千问 (Qwen) 配置")
+        print("=" * 60)
+        print()
+        print("获取 API Key 步骤：")
+        print("  1. 访问：https://dashscope.console.aliyun.com/")
+        print("  2. 登录阿里云账号")
+        print("  3. 开通 DashScope 服务")
+        print("  4. 创建 API Key")
+        print()
+        
+        api_key = input("请输入通义千问 API Key：").strip()
+        
+        if api_key:
+            print()
+            print("⏳ 正在配置...")
+            
+            # 配置 openclaw
+            try:
+                # 设置模型
+                subprocess.run(["openclaw", "config", "set", "model", "qwen"], capture_output=True)
+                # 设置 API Key
+                result = subprocess.run(
+                    ["openclaw", "config", "set", "providers.qwen.apiKey", api_key],
+                    capture_output=True, text=True
+                )
+                
+                if result.returncode == 0:
+                    print("✅ 通义千问 API Key 配置成功！")
+                    return True
+                else:
+                    print(f"⚠️  配置失败：{result.stderr}")
+                    print("   请稍后运行: openclaw configure")
+            except Exception as e:
+                print(f"⚠️  配置出错：{e}")
+                print("   请稍后运行: openclaw configure")
+        else:
+            print("⚠️  未输入 API Key")
+            print("   请稍后运行: openclaw configure")
+    
+    elif choice == '2':
+        # OpenAI
+        print("=" * 60)
+        print("📢 OpenAI 配置")
+        print("=" * 60)
+        print()
+        print("获取 API Key 步骤：")
+        print("  1. 访问：https://platform.openai.com/api-keys")
+        print("  2. 登录 OpenAI 账号")
+        print("  3. 创建 API Key")
+        print()
+        print("⚠️  注意：使用 OpenAI 需要科学上网")
+        print()
+        
+        api_key = input("请输入 OpenAI API Key：").strip()
+        
+        if api_key:
+            print()
+            print("⏳ 正在配置...")
+            
+            try:
+                subprocess.run(["openclaw", "config", "set", "model", "openai"], capture_output=True)
+                result = subprocess.run(
+                    ["openclaw", "config", "set", "providers.openai.apiKey", api_key],
+                    capture_output=True, text=True
+                )
+                
+                if result.returncode == 0:
+                    print("✅ OpenAI API Key 配置成功！")
+                    return True
+                else:
+                    print(f"⚠️  配置失败：{result.stderr}")
+            except Exception as e:
+                print(f"⚠️  配置出错：{e}")
+        else:
+            print("⚠️  未输入 API Key")
+    
+    return False
 
 
 def install_nodejs(system):

@@ -341,9 +341,49 @@ def deploy_local(local_info):
     # 安装 OpenClaw
     print()
     print("📦 安装 OpenClaw...")
+    
     if system == "Windows":
-        print("   请手动执行：npm install -g openclaw")
-        print("   然后执行：openclaw setup")
+        # Windows 下自动安装
+        print("   ⏳ 正在安装 OpenClaw，请稍候...")
+        
+        # 刷新环境变量（可能需要重新打开终端才能识别新安装的 node/npm）
+        # 尝试使用完整路径
+        npm_paths = [
+            r"C:\Program Files\nodejs\npm.cmd",
+            r"C:\Program Files (x86)\nodejs\npm.cmd",
+            "npm"  # 依赖 PATH
+        ]
+        
+        npm_cmd = None
+        for path in npm_paths:
+            try:
+                test_result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True)
+                if test_result.returncode == 0:
+                    npm_cmd = path
+                    break
+            except FileNotFoundError:
+                continue
+        
+        if npm_cmd:
+            result = subprocess.run(
+                [npm_cmd, "install", "-g", "openclaw"],
+                capture_output=True, text=True, shell=True
+            )
+            if result.returncode == 0:
+                print("   ✅ OpenClaw 安装成功！")
+                print()
+                print("   接下来请执行：")
+                print("   1. 关闭当前窗口")
+                print("   2. 打开新的命令提示符")
+                print("   3. 运行: openclaw setup")
+                print("   4. 运行: openclaw gateway start")
+            else:
+                print(f"   ❌ 安装失败：{result.stderr}")
+                print("   请手动执行：npm install -g openclaw")
+        else:
+            print("   ⚠️  未找到 npm，请确保 Node.js 已安装")
+            print("   安装 Node.js 后，请执行：npm install -g openclaw")
+            print("   然后：openclaw setup")
     else:
         result = subprocess.run(["npm", "install", "-g", "openclaw"], capture_output=True, text=True)
         if result.returncode == 0:
@@ -369,7 +409,68 @@ def install_nodejs(system):
     elif system == "Darwin":
         print("   请执行：brew install node")
     elif system == "Windows":
-        print("   请下载安装：https://nodejs.org/")
+        print("   正在检测安装方式...")
+        
+        # 方法1: 尝试使用 winget (Windows 11 自带)
+        try:
+            result = subprocess.run(["winget", "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("   ✅ 检测到 winget，正在自动安装 Node.js...")
+                print("   ⏳ 这可能需要几分钟，请稍候...")
+                
+                install_result = subprocess.run(
+                    ["winget", "install", "OpenJS.NodeJS.LTS", "--accept-source-agreements", "--accept-package-agreements"],
+                    capture_output=True, text=True, shell=True
+                )
+                
+                if install_result.returncode == 0:
+                    print("   ✅ Node.js 安装成功！")
+                    return True
+                else:
+                    print(f"   ⚠️  winget 安装失败：{install_result.stderr}")
+        except FileNotFoundError:
+            pass
+        
+        # 方法2: 尝试使用 chocolatey
+        try:
+            result = subprocess.run(["choco", "--version"], capture_output=True, text=True, shell=True)
+            if result.returncode == 0:
+                print("   ✅ 检测到 Chocolatey，正在自动安装 Node.js...")
+                os.system("choco install nodejs-lts -y")
+                print("   ✅ Node.js 安装完成！")
+                return True
+        except FileNotFoundError:
+            pass
+        
+        # 方法3: 下载安装包
+        print("   📥 正在下载 Node.js 安装包...")
+        print("   ⏳ 请稍候...")
+        
+        nodejs_url = "https://nodejs.org/dist/v20.18.1/node-v20.18.1-x64.msi"
+        installer_path = os.path.join(os.environ.get("TEMP", "."), "nodejs_installer.msi")
+        
+        try:
+            # 使用 PowerShell 下载
+            download_cmd = f'powershell -Command "Invoke-WebRequest -Uri \'{nodejs_url}\' -OutFile \'{installer_path}\'"'
+            os.system(download_cmd)
+            
+            if os.path.exists(installer_path):
+                print("   ✅ 下载完成，正在启动安装程序...")
+                print("   ⚠️  请在弹出的安装窗口中完成安装")
+                os.system(f'msiexec /i "{installer_path}"')
+                return True
+            else:
+                print("   ❌ 下载失败")
+        except Exception as e:
+            print(f"   ❌ 自动安装失败：{e}")
+        
+        # 方法4: 打开下载页面
+        print()
+        print("   自动安装失败，请手动下载：")
+        print("   https://nodejs.org/")
+        return False
+    
+    return True
 
 
 def main(requests):

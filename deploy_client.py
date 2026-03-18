@@ -346,46 +346,103 @@ def deploy_local(local_info):
         # Windows 下自动安装
         print("   ⏳ 正在安装 OpenClaw，请稍候...")
         
-        # 刷新环境变量（可能需要重新打开终端才能识别新安装的 node/npm）
         # 尝试使用完整路径
         npm_paths = [
             r"C:\Program Files\nodejs\npm.cmd",
             r"C:\Program Files (x86)\nodejs\npm.cmd",
+            os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
             "npm"  # 依赖 PATH
         ]
         
         npm_cmd = None
         for path in npm_paths:
             try:
-                test_result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True)
+                test_result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
                 if test_result.returncode == 0:
                     npm_cmd = path
                     break
-            except FileNotFoundError:
+            except:
                 continue
         
         if npm_cmd:
+            # 先卸载旧版本（可能存在）
+            print("   🔧 清理旧版本...")
+            subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], capture_output=True, text=True, shell=True)
+            
+            # 强制使用官方源安装最新版本
+            print("   📥 从官方源安装最新版本...")
             result = subprocess.run(
-                [npm_cmd, "install", "-g", "openclaw"],
+                [npm_cmd, "install", "-g", "openclaw@latest", "--registry", "https://registry.npmjs.org"],
                 capture_output=True, text=True, shell=True
             )
+            
             if result.returncode == 0:
-                print("   ✅ OpenClaw 安装成功！")
-                print()
-                print("   接下来请执行：")
-                print("   1. 关闭当前窗口")
-                print("   2. 打开新的命令提示符")
-                print("   3. 运行: openclaw setup")
-                print("   4. 运行: openclaw gateway start")
+                # 验证安装版本
+                print("   🔍 验证安装...")
+                verify_result = subprocess.run([npm_cmd, "list", "-g", "openclaw"], capture_output=True, text=True, shell=True)
+                
+                # 检查版本是否正确（应该是 2026.x.x 而不是 0.0.1）
+                if "openclaw@" in verify_result.stdout:
+                    version_line = [l for l in verify_result.stdout.split('\n') if 'openclaw@' in l]
+                    if version_line:
+                        import re
+                        match = re.search(r'openclaw@([\d.]+)', version_line[0])
+                        if match:
+                            version = match.group(1)
+                            if version.startswith('2026'):
+                                print(f"   ✅ OpenClaw {version} 安装成功！")
+                                print()
+                                print("   " + "=" * 50)
+                                print("   🎉 接下来的步骤：")
+                                print("   " + "=" * 50)
+                                print("   1. 关闭当前窗口")
+                                print("   2. 打开新的命令提示符（以管理员身份运行）")
+                                print("   3. 运行: openclaw setup")
+                                print("   4. 运行: openclaw gateway start")
+                                print("   5. 访问: http://localhost:18788")
+                                print()
+                            else:
+                                # 版本不对，尝试其他方法
+                                print(f"   ⚠️  安装了错误版本：{version}")
+                                print("   正在尝试修复...")
+                                
+                                # 尝试清理缓存后重装
+                                subprocess.run([npm_cmd, "cache", "clean", "--force"], capture_output=True, text=True, shell=True)
+                                subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], capture_output=True, text=True, shell=True)
+                                
+                                result2 = subprocess.run(
+                                    [npm_cmd, "install", "-g", "openclaw@2026.3.13", "--registry", "https://registry.npmjs.org"],
+                                    capture_output=True, text=True, shell=True
+                                )
+                                
+                                if result2.returncode == 0:
+                                    print("   ✅ 修复成功！请按上面的步骤操作")
+                                else:
+                                    print("   ❌ 自动修复失败")
+                                    print("   请手动执行以下命令：")
+                                    print("   npm uninstall -g openclaw")
+                                    print("   npm install -g openclaw@2026.3.13 --registry https://registry.npmjs.org")
+                else:
+                    print("   ⚠️  无法验证安装版本")
+                    print("   请手动检查: npm list -g openclaw")
             else:
                 print(f"   ❌ 安装失败：{result.stderr}")
-                print("   请手动执行：npm install -g openclaw")
+                print()
+                print("   请手动执行以下命令：")
+                print("   npm install -g openclaw@latest --registry https://registry.npmjs.org")
         else:
             print("   ⚠️  未找到 npm，请确保 Node.js 已安装")
-            print("   安装 Node.js 后，请执行：npm install -g openclaw")
-            print("   然后：openclaw setup")
+            print("   安装 Node.js 后，重新运行此工具")
     else:
-        result = subprocess.run(["npm", "install", "-g", "openclaw"], capture_output=True, text=True)
+        # Linux/macOS
+        # 先卸载旧版本
+        subprocess.run(["npm", "uninstall", "-g", "openclaw"], capture_output=True, text=True)
+        
+        # 安装最新版本
+        result = subprocess.run(
+            ["npm", "install", "-g", "openclaw@latest", "--registry", "https://registry.npmjs.org"],
+            capture_output=True, text=True
+        )
         if result.returncode == 0:
             print("✅ OpenClaw 安装成功")
         else:

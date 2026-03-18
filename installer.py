@@ -77,7 +77,7 @@ class InstallWizard:
         ]
         self.current_step = 0
         
-        # 服务商配置
+        # 服务商配置（按推荐度排序）
         self.providers = {
             "阿里云（通义千问）": {
                 "id": "qwen",
@@ -85,6 +85,13 @@ class InstallWizard:
                 "key_length": 32,
                 "get_key_url": "https://dashscope.console.aliyun.com/",
                 "config_key": "providers.qwen.apiKey"
+            },
+            "百度千帆（文心/DeepSeek/Kimi）": {
+                "id": "qianfan",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://console.bce.baidu.com/qianfan/",
+                "config_key": "providers.qianfan.apiKey"
             },
             "智谱 AI（GLM）": {
                 "id": "glm",
@@ -100,12 +107,26 @@ class InstallWizard:
                 "get_key_url": "https://platform.moonshot.cn/",
                 "config_key": "providers.kimi.apiKey"
             },
-            "OpenAI": {
-                "id": "openai",
+            "深度求索（DeepSeek）": {
+                "id": "deepseek",
                 "prefix": "sk-",
-                "key_length": 48,
-                "get_key_url": "https://platform.openai.com/api-keys",
-                "config_key": "providers.openai.apiKey"
+                "key_length": 32,
+                "get_key_url": "https://platform.deepseek.com/",
+                "config_key": "providers.deepseek.apiKey"
+            },
+            "腾讯混元": {
+                "id": "hunyuan",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://console.cloud.tencent.com/hunyuan",
+                "config_key": "providers.hunyuan.apiKey"
+            },
+            "字节豆包": {
+                "id": "doubao",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://console.volcengine.com/ark",
+                "config_key": "providers.doubao.apiKey"
             },
             "MiniMax": {
                 "id": "minimax",
@@ -113,6 +134,27 @@ class InstallWizard:
                 "key_length": 32,
                 "get_key_url": "https://www.minimaxi.com/",
                 "config_key": "providers.minimax.apiKey"
+            },
+            "华为云盘古": {
+                "id": "pangu",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://console.huaweicloud.com/pangu/",
+                "config_key": "providers.pangu.apiKey"
+            },
+            "零一万物（Yi）": {
+                "id": "yi",
+                "prefix": "",
+                "key_length": 32,
+                "get_key_url": "https://platform.lingyiwanwu.com/",
+                "config_key": "providers.yi.apiKey"
+            },
+            "OpenAI": {
+                "id": "openai",
+                "prefix": "sk-",
+                "key_length": 48,
+                "get_key_url": "https://platform.openai.com/api-keys",
+                "config_key": "providers.openai.apiKey"
             }
         }
         

@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.0.2"
+VERSION = "3.0.3"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18788
 MIN_DISK_SPACE_GB = 5
@@ -356,21 +356,25 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         ttk.Label(frame, text="请选择您要使用的 AI 模型服务商：", font=('Arial', 11)).pack(pady=10)
         
-        # 服务商选项
-        provider_frame = ttk.Frame(frame)
-        provider_frame.pack(fill='both', pady=10)
+        # 下拉框选择
+        combo_frame = ttk.Frame(frame)
+        combo_frame.pack(pady=10)
         
-        for name, config in self.providers.items():
-            row = ttk.Frame(provider_frame)
-            row.pack(fill='x', pady=5)
-            
-            rb = ttk.Radiobutton(row, text=name, variable=self.provider, value=name)
-            rb.pack(side='left')
-            
-            def get_key(url=config['get_key_url']):
+        # 服务商列表
+        provider_names = list(self.providers.keys())
+        
+        self.provider_combo = ttk.Combobox(combo_frame, values=provider_names, state='readonly', width=30, font=('Arial', 11))
+        self.provider_combo.pack(pady=5)
+        self.provider_combo.bind('<<ComboboxSelected>>', self.on_provider_selected)
+        
+        # 获取 API Key 按钮
+        def open_get_key():
+            provider = self.provider_combo.get()
+            if provider:
+                url = self.providers[provider]['get_key_url']
                 webbrowser.open(url)
-            
-            ttk.Button(row, text="如何获取 API Key", command=get_key).pack(side='right', padx=10)
+        
+        ttk.Button(combo_frame, text="如何获取 API Key", command=open_get_key).pack(pady=10)
         
         # 提示
         ttk.Label(frame, text="推荐国内用户选择：阿里云（通义千问）", font=('Arial', 10), foreground='gray').pack(pady=10)
@@ -383,10 +387,16 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.provider_next_btn = ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page(), state='disabled')
         self.provider_next_btn.pack(side='right', padx=5)
         
-        # 监听选择变化
-        self.provider.trace('w', lambda *args: self.on_provider_change())
-        
         return frame
+    
+    def on_provider_selected(self, event):
+        """服务商下拉框选择事件"""
+        provider = self.provider_combo.get()
+        if provider:
+            self.provider.set(provider)
+            self.provider_next_btn.config(state='normal')
+        else:
+            self.provider_next_btn.config(state='disabled')
     
     def create_apikey_page(self):
         """创建 API Key 输入页面"""

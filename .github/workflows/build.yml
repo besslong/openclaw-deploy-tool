@@ -8,14 +8,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [windows-latest]
-        include:
-          - os: windows-latest
-            artifact_name: OpenClaw-安装程序
-
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -31,14 +24,14 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --name "OpenClaw-安装程序" --icon=NONE installer.py
+        pyinstaller --onefile --windowed --name "OpenClaw 一键部署工具" installer.py
       shell: bash
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.artifact_name }}
-        path: dist/OpenClaw-安装程序*
+        name: OpenClaw-一键部署工具
+        path: dist/OpenClaw 一键部署工具.exe
         retention-days: 30
 
   release:
@@ -58,5 +51,5 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          artifacts/OpenClaw-安装程序/OpenClaw-安装程序.exe
+          artifacts/OpenClaw-一键部署工具/OpenClaw 一键部署工具.exe
         generate_release_notes: true

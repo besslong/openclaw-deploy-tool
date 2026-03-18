@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "2.1.0"
+VERSION = "3.0.1"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18788
 MIN_DISK_SPACE_GB = 5
@@ -32,7 +32,7 @@ class InstallWizard:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("OpenClaw 安装向导")
+        self.root.title("OpenClaw 一键部署工具")
         self.root.geometry("600x500")
         self.root.resizable(False, False)
         
@@ -179,59 +179,99 @@ class InstallWizard:
         
     def create_welcome_page(self):
         """创建欢迎页"""
-        frame = ttk.Frame(self.root, padding=40)
+        # 主框架
+        frame = ttk.Frame(self.root)
+        frame.pack(fill='both', expand=True)
+        
+        # ===== 顶部区域 =====
+        header_frame = ttk.Frame(frame, padding=20)
+        header_frame.pack(fill='x')
         
         # Logo（OpenClaw 龙虾标志）
-        logo_label = ttk.Label(frame, text="🦞", font=('Arial', 48))
+        logo_label = ttk.Label(header_frame, text="🦞", font=('Arial', 48))
         logo_label.pack(pady=10)
         
-        title_label = ttk.Label(frame, text="OpenClaw", font=('Arial', 28, 'bold'))
+        title_label = ttk.Label(header_frame, text="OpenClaw 一键部署工具", font=('Arial', 20, 'bold'))
         title_label.pack()
         
-        # 版本
-        version_label = ttk.Label(frame, text=f"版本 {VERSION}", font=('Arial', 11), foreground='gray')
+        version_label = ttk.Label(header_frame, text=f"版本 {VERSION}", font=('Arial', 10), foreground='gray')
         version_label.pack()
         
+        # ===== 中间区域 =====
+        content_frame = ttk.Frame(frame, padding=40)
+        content_frame.pack(fill='both', expand=True)
+        
         # 欢迎文字
-        welcome_text = """
-欢迎使用 OpenClaw 安装向导
+        welcome_text = """欢迎使用 OpenClaw 安装向导
 
-OpenClaw 是您的个人 AI 助手框架，
-支持多种 AI 模型，可在本地运行。
+OpenClaw 是您的专属 AI 助手，可本地运行，
+支持通义千问、百度千帆、Kimi 等主流模型。
 
-点击"下一步"继续安装。
-        """
-        welcome_label = ttk.Label(frame, text=welcome_text, font=('Arial', 11), justify='center')
+点击"下一步"继续安装。"""
+        
+        welcome_label = ttk.Label(content_frame, text=welcome_text, font=('Arial', 11), justify='center')
         welcome_label.pack(pady=20)
         
-        # 用户协议
-        agreement_frame = ttk.Frame(frame)
-        agreement_frame.pack(pady=20, fill='x')
+        # ===== 用户协议区域 =====
+        agreement_frame = ttk.Frame(content_frame)
+        agreement_frame.pack(pady=20)
         
-        agree_check = ttk.Checkbutton(
-            agreement_frame, 
-            text="我已阅读并同意《用户协议》和《隐私政策》",
+        # 复选框（使用标准样式）
+        agree_check = tk.Checkbutton(
+            agreement_frame,
+            text="我已阅读并同意",
             variable=self.agreed,
-            command=self.on_agreement_toggle
+            command=self.on_agreement_toggle,
+            font=('Arial', 10),
+            activebackground='white',
+            selectcolor='white'
         )
-        agree_check.pack()
+        agree_check.pack(side='left')
         
-        # 协议链接
+        # 用户协议链接（蓝色下划线）
         def open_license(event):
             webbrowser.open("https://docs.openclaw.ai/terms")
         
-        license_link = ttk.Label(agreement_frame, text="查看用户协议", style='Link.TLabel')
-        license_link.pack()
+        license_link = tk.Label(
+            agreement_frame,
+            text="《用户协议》",
+            font=('Arial', 10, 'underline'),
+            fg='#0066cc',
+            cursor='hand2',
+            bg='white'
+        )
+        license_link.pack(side='left')
         license_link.bind('<Button-1>', open_license)
         
-        # 按钮
-        btn_frame = ttk.Frame(frame)
-        btn_frame.pack(side='bottom', fill='x', pady=20)
+        ttk.Label(agreement_frame, text="和", font=('Arial', 10)).pack(side='left')
         
-        self.welcome_next_btn = ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page(), state='disabled')
-        self.welcome_next_btn.pack(side='right', padx=5)
+        # 隐私政策链接
+        def open_privacy(event):
+            webbrowser.open("https://docs.openclaw.ai/privacy")
         
-        ttk.Button(btn_frame, text="退出", command=self.quit).pack(side='right', padx=5)
+        privacy_link = tk.Label(
+            agreement_frame,
+            text="《隐私政策》",
+            font=('Arial', 10, 'underline'),
+            fg='#0066cc',
+            cursor='hand2',
+            bg='white'
+        )
+        privacy_link.pack(side='left')
+        privacy_link.bind('<Button-1>', open_privacy)
+        
+        # ===== 底部按钮区域 =====
+        btn_frame = ttk.Frame(frame, padding=20)
+        btn_frame.pack(side='bottom', fill='x')
+        
+        # 右侧按钮
+        right_btn_frame = ttk.Frame(btn_frame)
+        right_btn_frame.pack(side='right')
+        
+        ttk.Button(right_btn_frame, text="退出", command=self.quit, width=10).pack(side='left', padx=5)
+        
+        self.welcome_next_btn = ttk.Button(right_btn_frame, text="下一步", command=lambda: self.next_page(), width=10, state='disabled')
+        self.welcome_next_btn.pack(side='left', padx=5)
         
         return frame
     

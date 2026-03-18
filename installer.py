@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.0"
+VERSION = "3.2.1"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -31,7 +31,104 @@ COLOR_ACCENT = "#FF6D00"      # 强调色（橙色）
 COLOR_BG = "#F5F5F5"          # 背景灰
 COLOR_TEXT = "#333333"        # 文字灰
 COLOR_LINK = "#0066CC"        # 链接蓝
-FONT_FAMILY = "Microsoft YaHei"  # 微软雅黑
+
+# 字体回退列表（解决不同电脑字体问题）
+import platform
+if platform.system() == "Windows":
+    FONT_FAMILY = "Microsoft YaHei"  # 微软雅黑
+else:
+    FONT_FAMILY = "Arial"
+
+# ============= 服务商→模型对照表 =============
+# 每个服务商配置：推荐模型白名单 + 默认模型
+PROVIDER_MODELS = {
+    "qianfan": {
+        "name": "百度千帆",
+        "models": [
+            "qianfan/ernie-4.0-8k",
+            "qianfan/ernie-4.0-turbo-8k", 
+            "qianfan/ernie-3.5-8k",
+            "qianfan/deepseek-v3",
+            "qianfan/deepseek-r1",
+            "qianfan/qwen3.5-plus"
+        ],
+        "primary": "qianfan/ernie-4.0-8k",
+        "get_key_url": "https://console.bce.baidu.com/qianfan/"
+    },
+    "qwen": {
+        "name": "阿里云（通义千问）",
+        "models": [
+            "qwen/qwen3.5-plus",
+            "qwen/qwen3.5-turbo",
+            "qwen/qwen3-72b-instruct",
+            "qwen/qwen2.5-72b-instruct",
+            "qwen/qwen-long"
+        ],
+        "primary": "qwen/qwen3.5-plus",
+        "get_key_url": "https://dashscope.console.aliyun.com/"
+    },
+    "openai": {
+        "name": "OpenAI",
+        "models": [
+            "openai/gpt-4o",
+            "openai/gpt-4o-mini",
+            "openai/gpt-4-turbo",
+            "openai/gpt-3.5-turbo"
+        ],
+        "primary": "openai/gpt-4o-mini",
+        "get_key_url": "https://platform.openai.com/api-keys"
+    },
+    "moonshot": {
+        "name": "Kimi（月之暗面）",
+        "models": [
+            "moonshot/kimi-k2.5",
+            "moonshot/moonshot-v1-128k",
+            "moonshot/moonshot-v1-32k",
+            "moonshot/moonshot-v1-8k"
+        ],
+        "primary": "moonshot/kimi-k2.5",
+        "get_key_url": "https://platform.moonshot.cn/"
+    },
+    "minimax": {
+        "name": "MiniMax",
+        "models": [
+            "minimax/abab6.5s-chat",
+            "minimax/abab6.5g-chat",
+            "minimax/abab5.5-chat"
+        ],
+        "primary": "minimax/abab6.5s-chat",
+        "get_key_url": "https://www.minimaxi.com/"
+    },
+    "volcengine": {
+        "name": "火山引擎（字节）",
+        "models": [
+            "volcengine/doubao-pro-256k",
+            "volcengine/doubao-pro-32k",
+            "volcengine/doubao-lite-32k"
+        ],
+        "primary": "volcengine/doubao-pro-32k",
+        "get_key_url": "https://console.volcengine.com/ark"
+    },
+    "anthropic": {
+        "name": "Anthropic (Claude)",
+        "models": [
+            "anthropic/claude-sonnet-4-20250514",
+            "anthropic/claude-3-5-sonnet",
+            "anthropic/claude-3-haiku"
+        ],
+        "primary": "anthropic/claude-3-5-sonnet",
+        "get_key_url": "https://console.anthropic.com/"
+    },
+    "deepseek": {
+        "name": "DeepSeek",
+        "models": [
+            "deepseek/deepseek-chat",
+            "deepseek/deepseek-reasoner"
+        ],
+        "primary": "deepseek/deepseek-chat",
+        "get_key_url": "https://platform.deepseek.com/"
+    }
+}
 # ===================================
 
 
@@ -40,6 +137,14 @@ class InstallWizard:
     
     def __init__(self):
         self.root = tk.Tk()
+        
+        # Windows DPI 感知（解决高分屏文字显示问题）
+        try:
+            from ctypes import windll
+            windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
+        except:
+            pass
+        
         self.root.title("OpenClaw 一键部署工具")
         self.root.geometry("600x550")  # 增加高度
         self.root.resizable(False, False)
@@ -85,86 +190,8 @@ class InstallWizard:
         ]
         self.current_step = 0
         
-        # 服务商配置（按推荐度排序）
-        self.providers = {
-            "阿里云（通义千问）": {
-                "id": "qwen",
-                "prefix": "sk-",
-                "key_length": 32,
-                "get_key_url": "https://dashscope.console.aliyun.com/",
-                "config_key": "providers.qwen.apiKey"
-            },
-            "百度千帆（文心/DeepSeek/Kimi）": {
-                "id": "qianfan",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://console.bce.baidu.com/qianfan/",
-                "config_key": "providers.qianfan.apiKey"
-            },
-            "智谱 AI（GLM）": {
-                "id": "glm",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://open.bigmodel.cn/",
-                "config_key": "providers.glm.apiKey"
-            },
-            "Kimi（月之暗面）": {
-                "id": "kimi",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://platform.moonshot.cn/",
-                "config_key": "providers.kimi.apiKey"
-            },
-            "深度求索（DeepSeek）": {
-                "id": "deepseek",
-                "prefix": "sk-",
-                "key_length": 32,
-                "get_key_url": "https://platform.deepseek.com/",
-                "config_key": "providers.deepseek.apiKey"
-            },
-            "腾讯混元": {
-                "id": "hunyuan",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://console.cloud.tencent.com/hunyuan",
-                "config_key": "providers.hunyuan.apiKey"
-            },
-            "字节豆包": {
-                "id": "doubao",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://console.volcengine.com/ark",
-                "config_key": "providers.doubao.apiKey"
-            },
-            "MiniMax": {
-                "id": "minimax",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://www.minimaxi.com/",
-                "config_key": "providers.minimax.apiKey"
-            },
-            "华为云盘古": {
-                "id": "pangu",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://console.huaweicloud.com/pangu/",
-                "config_key": "providers.pangu.apiKey"
-            },
-            "零一万物（Yi）": {
-                "id": "yi",
-                "prefix": "",
-                "key_length": 32,
-                "get_key_url": "https://platform.lingyiwanwu.com/",
-                "config_key": "providers.yi.apiKey"
-            },
-            "OpenAI": {
-                "id": "openai",
-                "prefix": "sk-",
-                "key_length": 48,
-                "get_key_url": "https://platform.openai.com/api-keys",
-                "config_key": "providers.openai.apiKey"
-            }
-        }
+        # 服务商列表（从 PROVIDER_MODELS 获取）
+        self.providers = {k: v["name"] for k, v in PROVIDER_MODELS.items()}
         
         # 创建页面
         self.pages = []
@@ -443,32 +470,34 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         """创建服务商选择页面"""
         frame = ttk.Frame(self.root, padding=40)
         
-        ttk.Label(frame, text="🤖 选择 AI 服务商", font=('Arial', 18, 'bold')).pack(pady=20)
+        ttk.Label(frame, text="🤖 选择 AI 服务商", font=(FONT_FAMILY, 18, 'bold')).pack(pady=20)
         
-        ttk.Label(frame, text="请选择您要使用的 AI 模型服务商：", font=('Arial', 11)).pack(pady=10)
+        ttk.Label(frame, text="请选择您要使用的 AI 模型服务商：", font=(FONT_FAMILY, 11)).pack(pady=10)
         
         # 下拉框选择
         combo_frame = ttk.Frame(frame)
         combo_frame.pack(pady=10)
         
-        # 服务商列表
-        provider_names = list(self.providers.keys())
+        # 服务商列表（显示中文名称）
+        provider_names = [v["name"] for v in PROVIDER_MODELS.values()]
         
-        self.provider_combo = ttk.Combobox(combo_frame, values=provider_names, state='readonly', width=30, font=('Arial', 11))
+        self.provider_combo = ttk.Combobox(combo_frame, values=provider_names, state='readonly', width=35, font=(FONT_FAMILY, 11))
         self.provider_combo.pack(pady=5)
         self.provider_combo.bind('<<ComboboxSelected>>', self.on_provider_selected)
         
         # 获取 API Key 按钮
         def open_get_key():
-            provider = self.provider_combo.get()
-            if provider:
-                url = self.providers[provider]['get_key_url']
-                webbrowser.open(url)
+            provider_name = self.provider_combo.get()
+            # 根据名称找到对应的 provider_id
+            for pid, info in PROVIDER_MODELS.items():
+                if info["name"] == provider_name:
+                    webbrowser.open(info["get_key_url"])
+                    break
         
         ttk.Button(combo_frame, text="如何获取 API Key", command=open_get_key).pack(pady=10)
         
         # 提示
-        ttk.Label(frame, text="推荐国内用户选择：阿里云（通义千问）", font=('Arial', 10), foreground='gray').pack(pady=10)
+        ttk.Label(frame, text="推荐国内用户选择：百度千帆 或 阿里云（通义千问）", font=(FONT_FAMILY, 10), foreground='gray').pack(pady=10)
         
         # 按钮
         btn_frame = ttk.Frame(frame)
@@ -482,9 +511,13 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def on_provider_selected(self, event):
         """服务商下拉框选择事件"""
-        provider = self.provider_combo.get()
-        if provider:
-            self.provider.set(provider)
+        provider_name = self.provider_combo.get()
+        if provider_name:
+            # 根据名称找到对应的 provider_id
+            for pid, info in PROVIDER_MODELS.items():
+                if info["name"] == provider_name:
+                    self.provider.set(pid)  # 存储 provider_id
+                    break
             self.provider_next_btn.config(state='normal')
         else:
             self.provider_next_btn.config(state='disabled')
@@ -1036,17 +1069,20 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
     
     def configure_api_key(self):
-        """配置 API Key"""
-        provider = self.provider.get()
+        """配置 API Key 和模型"""
+        provider_id = self.provider.get()  # 获取 provider_id（如 qianfan, qwen）
         api_key = self.api_key.get()
         
-        if not provider or not api_key:
+        if not provider_id or not api_key:
             return
         
-        config = self.providers.get(provider, {})
-        provider_id = config.get('id', provider.lower())
+        # 从 PROVIDER_MODELS 获取配置
+        provider_config = PROVIDER_MODELS.get(provider_id, {})
+        if not provider_config:
+            print(f"未知服务商: {provider_id}")
+            return
         
-        # 使用 openclaw config set 命令
+        # 查找 openclaw 命令路径
         openclaw_paths = [
             r"C:\Program Files\nodejs\openclaw.cmd",
             os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
@@ -1064,35 +1100,53 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 continue
         
         if not openclaw_cmd:
-            # 配置文件可能还不存在，跳过此步骤让用户手动配置
+            print("未找到 openclaw 命令，跳过配置")
             return
         
-        # 设置默认模型
-        model_map = {
-            "qwen": "modelstudio/qwen3.5-plus",
-            "qianfan": "qianfan/ernie-4.0-8k",  # 百度千帆
-            "glm": "modelstudio/glm-4.7",
-            "kimi": "modelstudio/kimi-k2.5",
-            "deepseek": "deepseek/deepseek-chat",  # DeepSeek
-            "hunyuan": "hunyuan/hunyuan-lite",  # 腾讯混元
-            "doubao": "doubao/doubao-pro-32k",  # 字节豆包
-            "minimax": "modelstudio/MiniMax-M2.5",
-            "pangu": "pangu/pangu-nlp",  # 华为盘古
-            "yi": "yi/yi-large",  # 零一万物
-            "openai": "openai/gpt-4o"
-        }
-        
-        default_model = model_map.get(provider_id, f"{provider_id}/default")
-        
         try:
-            # 设置模型
-            result = subprocess.run([openclaw_cmd, "config", "set", "agents.defaults.model.primary", default_model], 
-                          shell=True, capture_output=True, text=True, timeout=30)
-            if result.returncode != 0:
-                print(f"模型配置警告: {result.stderr}")
+            # 1. 设置模型白名单
+            models = provider_config.get("models", [])
+            if models:
+                models_json = json.dumps(models)
+                subprocess.run(
+                    [openclaw_cmd, "config", "set", "agents.defaults.models", models_json],
+                    shell=True, capture_output=True, text=True, timeout=30
+                )
             
-            # TODO: API Key 需要通过 openclaw configure 交互式配置
-            # 这里暂时跳过，让用户手动配置
+            # 2. 设置默认模型
+            primary_model = provider_config.get("primary", models[0] if models else "")
+            if primary_model:
+                subprocess.run(
+                    [openclaw_cmd, "config", "set", "agents.defaults.model.primary", primary_model],
+                    shell=True, capture_output=True, text=True, timeout=30
+                )
+            
+            # 3. 写入 API Key 到配置文件
+            config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            
+            # 读取现有配置
+            config = {}
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                except:
+                    pass
+            
+            # 设置 API Key
+            if "providers" not in config:
+                config["providers"] = {}
+            if provider_id not in config["providers"]:
+                config["providers"][provider_id] = {}
+            config["providers"][provider_id]["apiKey"] = api_key
+            
+            # 写回配置文件
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            print(f"API Key 配置成功: {provider_id}")
+            print(f"默认模型: {primary_model}")
             
         except Exception as e:
             print(f"配置警告: {e}")

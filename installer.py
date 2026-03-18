@@ -930,7 +930,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         install_dir = self.install_path.get()
         os.makedirs(install_dir, exist_ok=True)
         
-        # 使用 npm 安装（需要刷新环境变量）
+        # 查找 npm
         npm_paths = [
             r"C:\Program Files\nodejs\npm.cmd",
             r"C:\Program Files (x86)\nodejs\npm.cmd",
@@ -951,13 +951,15 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         if not npm_cmd:
             raise Exception("找不到 npm，请确保 Node.js 已正确安装")
         
-        # 设置 npm 使用国内镜像
-        subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True)
+        # 先设置 npm 镜像（加速下载）
+        self.update_progress(42, "配置 npm 镜像源...")
+        subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True, capture_output=True)
         
-        # 安装 openclaw
+        # 安装 openclaw（使用淘宝镜像）
+        self.update_progress(45, "正在下载 OpenClaw（使用国内镜像）...")
         result = subprocess.run(
-            [npm_cmd, "install", "-g", "openclaw@latest", "--registry", "https://registry.npmjs.org"],
-            capture_output=True, text=True, shell=True
+            [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
+            capture_output=True, text=True, shell=True, timeout=300  # 5 分钟超时
         )
         
         if result.returncode != 0:

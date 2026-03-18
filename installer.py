@@ -807,36 +807,40 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def do_install(self):
         """执行安装（后台线程）"""
-        steps = len(self.install_steps)
-        
         try:
             # 步骤1: 检测系统
-            self.update_progress(0, "检测系统环境...")
-            self.root.after(500, lambda: self.update_progress(100/steps, "系统检测完成"))
+            self.root.after(0, lambda: self.update_progress(5, "检测系统环境..."))
+            import time
+            time.sleep(0.5)
+            self.root.after(0, lambda: self.update_progress(10, "系统检测完成 ✓"))
             
             # 步骤2: 安装 Node.js
-            self.root.after(1000, lambda: self.update_progress(100/steps, "正在安装 Node.js..."))
+            self.root.after(0, lambda: self.update_progress(15, "正在检查 Node.js..."))
             self.install_nodejs()
+            self.root.after(0, lambda: self.update_progress(25, "Node.js 就绪 ✓"))
             
             # 步骤3: 安装 Git
-            self.root.after(2000, lambda: self.update_progress(200/steps, "正在安装 Git..."))
+            self.root.after(0, lambda: self.update_progress(30, "正在检查 Git..."))
             self.install_git()
+            self.root.after(0, lambda: self.update_progress(40, "Git 就绪 ✓"))
             
             # 步骤4: 安装 OpenClaw
-            self.root.after(3000, lambda: self.update_progress(300/steps, "正在下载 OpenClaw..."))
+            self.root.after(0, lambda: self.update_progress(45, "正在配置 npm 镜像源..."))
             self.install_openclaw()
+            self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
             
             # 步骤5: 配置 API Key
-            self.root.after(4000, lambda: self.update_progress(400/steps, "正在配置 API Key..."))
+            self.root.after(0, lambda: self.update_progress(75, "正在配置 API Key..."))
             self.configure_api_key()
+            self.root.after(0, lambda: self.update_progress(85, "API Key 配置完成 ✓"))
             
             # 步骤6: 安装服务
-            self.root.after(5000, lambda: self.update_progress(500/steps, "正在安装系统服务..."))
+            self.root.after(0, lambda: self.update_progress(90, "正在启动服务..."))
             self.install_service()
             
             # 完成
-            self.root.after(6000, lambda: self.update_progress(100, "安装完成"))
-            self.root.after(6500, self.show_finish)
+            self.root.after(0, lambda: self.update_progress(100, "安装完成 ✓"))
+            self.root.after(500, self.show_finish)
             
         except Exception as e:
             self.root.after(0, lambda: self.show_error(str(e)))
@@ -951,19 +955,29 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         if not npm_cmd:
             raise Exception("找不到 npm，请确保 Node.js 已正确安装")
         
-        # 先设置 npm 镜像（加速下载）
-        self.update_progress(42, "配置 npm 镜像源...")
+        # 设置 npm 镜像（加速下载）
+        self.root.after(0, lambda: self.update_progress(48, "配置 npm 淘宝镜像..."))
         subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True, capture_output=True)
         
         # 安装 openclaw（使用淘宝镜像）
-        self.update_progress(45, "正在下载 OpenClaw（使用国内镜像）...")
+        self.root.after(0, lambda: self.update_progress(50, "正在下载 OpenClaw..."))
+        self.root.after(0, lambda: self.update_progress(52, "使用国内镜像加速下载..."))
+        
         result = subprocess.run(
             [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
             capture_output=True, text=True, shell=True, timeout=300  # 5 分钟超时
         )
         
         if result.returncode != 0:
-            raise Exception(f"OpenClaw 安装失败：{result.stderr}")
+            # 如果失败，尝试官方源
+            self.root.after(0, lambda: self.update_progress(55, "淘宝镜像失败，尝试官方源..."))
+            result = subprocess.run(
+                [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmjs.org"],
+                capture_output=True, text=True, shell=True, timeout=600  # 10 分钟超时
+            )
+        
+        if result.returncode != 0:
+            raise Exception(f"OpenClaw 安装失败：{result.stderr[:500]}")
     
     def configure_api_key(self):
         """配置 API Key"""

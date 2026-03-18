@@ -25,7 +25,7 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --name "OpenClaw-Installer" installer.py
+        pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Installer" installer.py
       shell: bash
 
     - name: Upload artifact

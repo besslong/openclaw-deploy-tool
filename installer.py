@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.0.1"
+VERSION = "3.0.2"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18788
 MIN_DISK_SPACE_GB = 5
@@ -33,7 +33,7 @@ class InstallWizard:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("OpenClaw 一键部署工具")
-        self.root.geometry("600x500")
+        self.root.geometry("600x550")  # 增加高度
         self.root.resizable(False, False)
         
         # 禁用最大化按钮（Windows）
@@ -127,7 +127,7 @@ class InstallWizard:
         """窗口居中"""
         self.root.update_idletasks()
         width = 600
-        height = 500
+        height = 550
         x = (self.root.winfo_screenwidth() // 2) - (width // 2)
         y = (self.root.winfo_screenheight() // 2) - (height // 2)
         self.root.geometry(f'{width}x{height}+{x}+{y}')
@@ -179,27 +179,27 @@ class InstallWizard:
         
     def create_welcome_page(self):
         """创建欢迎页"""
-        # 主框架
+        # 主框架 - 使用 grid 布局更清晰
         frame = ttk.Frame(self.root)
         frame.pack(fill='both', expand=True)
         
         # ===== 顶部区域 =====
-        header_frame = ttk.Frame(frame, padding=20)
-        header_frame.pack(fill='x')
+        header_frame = ttk.Frame(frame)
+        header_frame.pack(pady=30)
         
         # Logo（OpenClaw 龙虾标志）
         logo_label = ttk.Label(header_frame, text="🦞", font=('Arial', 48))
-        logo_label.pack(pady=10)
+        logo_label.pack()
         
         title_label = ttk.Label(header_frame, text="OpenClaw 一键部署工具", font=('Arial', 20, 'bold'))
-        title_label.pack()
+        title_label.pack(pady=5)
         
         version_label = ttk.Label(header_frame, text=f"版本 {VERSION}", font=('Arial', 10), foreground='gray')
         version_label.pack()
         
         # ===== 中间区域 =====
-        content_frame = ttk.Frame(frame, padding=40)
-        content_frame.pack(fill='both', expand=True)
+        content_frame = ttk.Frame(frame)
+        content_frame.pack(pady=20)
         
         # 欢迎文字
         welcome_text = """欢迎使用 OpenClaw 安装向导
@@ -210,25 +210,23 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
 点击"下一步"继续安装。"""
         
         welcome_label = ttk.Label(content_frame, text=welcome_text, font=('Arial', 11), justify='center')
-        welcome_label.pack(pady=20)
+        welcome_label.pack()
         
         # ===== 用户协议区域 =====
         agreement_frame = ttk.Frame(content_frame)
         agreement_frame.pack(pady=20)
         
-        # 复选框（使用标准样式）
+        # 复选框
         agree_check = tk.Checkbutton(
             agreement_frame,
-            text="我已阅读并同意",
+            text="我已阅读并同意 ",
             variable=self.agreed,
             command=self.on_agreement_toggle,
-            font=('Arial', 10),
-            activebackground='white',
-            selectcolor='white'
+            font=('Arial', 10)
         )
         agree_check.pack(side='left')
         
-        # 用户协议链接（蓝色下划线）
+        # 用户协议链接
         def open_license(event):
             webbrowser.open("https://docs.openclaw.ai/terms")
         
@@ -237,13 +235,12 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             text="《用户协议》",
             font=('Arial', 10, 'underline'),
             fg='#0066cc',
-            cursor='hand2',
-            bg='white'
+            cursor='hand2'
         )
         license_link.pack(side='left')
         license_link.bind('<Button-1>', open_license)
         
-        ttk.Label(agreement_frame, text="和", font=('Arial', 10)).pack(side='left')
+        ttk.Label(agreement_frame, text=" 和 ", font=('Arial', 10)).pack(side='left')
         
         # 隐私政策链接
         def open_privacy(event):
@@ -254,23 +251,19 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             text="《隐私政策》",
             font=('Arial', 10, 'underline'),
             fg='#0066cc',
-            cursor='hand2',
-            bg='white'
+            cursor='hand2'
         )
         privacy_link.pack(side='left')
         privacy_link.bind('<Button-1>', open_privacy)
         
-        # ===== 底部按钮区域 =====
-        btn_frame = ttk.Frame(frame, padding=20)
-        btn_frame.pack(side='bottom', fill='x')
+        # ===== 底部按钮区域（固定在底部）=====
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(side='bottom', pady=20)
         
-        # 右侧按钮
-        right_btn_frame = ttk.Frame(btn_frame)
-        right_btn_frame.pack(side='right')
+        # 右侧按钮容器
+        ttk.Button(btn_frame, text="退出", command=self.quit, width=10).pack(side='left', padx=5)
         
-        ttk.Button(right_btn_frame, text="退出", command=self.quit, width=10).pack(side='left', padx=5)
-        
-        self.welcome_next_btn = ttk.Button(right_btn_frame, text="下一步", command=lambda: self.next_page(), width=10, state='disabled')
+        self.welcome_next_btn = ttk.Button(btn_frame, text="下一步", command=lambda: self.next_page(), width=10, state='disabled')
         self.welcome_next_btn.pack(side='left', padx=5)
         
         return frame

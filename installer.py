@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.5"
+VERSION = "3.2.6"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -883,9 +883,113 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         thread.daemon = True
         thread.start()
     
+    def cleanup_environment(self):
+        """环境预清理（安装前执行）"""
+        self.root.after(0, lambda: self.update_progress(1, "清理旧版本残留..."))
+        
+        try:
+            # 1. 杀掉残留 PM2 进程
+            self.root.after(0, lambda: self.update_progress(2, "清理 PM2 进程..."))
+            subprocess.run(["pm2", "delete", "openclaw"], shell=True, capture_output=True, timeout=10)
+            subprocess.run(["pm2", "save"], shell=True, capture_output=True, timeout=10)
+            print("✓ PM2 进程已清理")
+        except:
+            pass
+        
+        try:
+            # 2. 删除 Windows 计划任务
+            self.root.after(0, lambda: self.update_progress(3, "清理计划任务..."))
+            subprocess.run(['schtasks', '/Delete', '/F', '/TN', 'OpenClaw Gateway'], 
+                          shell=True, capture_output=True, timeout=10)
+            subprocess.run(['schtasks', '/Delete', '/F', '/TN', 'OpenClaw PM2'], 
+                          shell=True, capture_output=True, timeout=10)
+            print("✓ 计划任务已清理")
+        except:
+            pass
+        
+        try:
+            # 3. 检查并杀掉 18789 端口占用
+            self.root.after(0, lambda: self.update_progress(4, "检查端口占用..."))
+            result = subprocess.run(
+                'netstat -ano | findstr :18789',
+                shell=True, capture_output=True, text=True, timeout=10
+            )
+            if result.stdout:
+                # 提取 PID 并杀掉
+                for line in result.stdout.strip().split('\n'):
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        pid = parts[-1]
+                        subprocess.run(['taskkill', '/F', '/PID', pid], 
+                                      shell=True, capture_output=True, timeout=10)
+                print("✓ 端口占用已清理")
+        except:
+            pass
+        
+        try:
+            # 4. 清理 npm 缓存
+            npm_paths = [
+                r"C:\Program Files\nodejs\npm.cmd",
+                os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
+                "npm"
+            ]
+            for npm_path in npm_paths:
+                try:
+                    result = subprocess.run([npm_path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
+                    if result.returncode == 0:
+                        subprocess.run([npm_path, "cache", "clean", "--force"], 
+                                      shell=True, capture_output=True, timeout=60)
+                        print("✓ npm 缓存已清理")
+                        break
+                except:
+                    continue
+        except:
+            pass
+        
+        # 5. 询问用户是否保留旧配置
+        config_path = os.path.expanduser("~/.openclaw")
+        if os.path.exists(config_path):
+            self.root.after(0, lambda: self.update_progress(5, "检测到旧配置..."))
+            
+            # 在主线程中弹窗询问
+            result = [None]
+            def ask_user():
+                result[0] = messagebox.askyesno(
+                    "检测到旧配置",
+                    "检测到旧版 OpenClaw 配置目录。\n\n"
+                    "是否保留旧配置？\n\n"
+                    "• 保留：可恢复历史会话\n"
+                    "• 不保留：全新安装，更稳定"
+                )
+            
+            self.root.after(0, ask_user)
+            
+            # 等待用户回答
+            import time
+            while result[0] is None:
+                time.sleep(0.1)
+            
+            if result[0]:  # 用户选择保留
+                # 备份到桌面
+                backup_path = os.path.join(os.path.expanduser("~/Desktop"), 
+                                          f"openclaw_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+                import shutil
+                shutil.move(config_path, backup_path)
+                print(f"✓ 旧配置已备份到: {backup_path}")
+            else:
+                # 删除旧配置
+                import shutil
+                shutil.rmtree(config_path, ignore_errors=True)
+                print("✓ 旧配置已删除")
+        
+        print("✓ 环境预清理完成")
+    
     def do_install(self):
         """执行安装（后台线程）"""
         try:
+            # 步骤0: 环境预清理
+            self.cleanup_environment()
+            
             # 步骤1: 检测系统
             self.root.after(0, lambda: self.update_progress(5, "检测系统环境..."))
             import time

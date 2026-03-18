@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.8"
+VERSION = "3.2.9"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -39,111 +39,66 @@ if platform.system() == "Windows":
 else:
     FONT_FAMILY = "Arial"
 
-# ============= 服务商→模型对照表 =============
-# 每个服务商配置：环境变量名 + 推荐模型 + 默认模型
-PROVIDER_MODELS = {
+# ============= 服务商信息 =============
+PROVIDER_INFO = {
     "qianfan": {
         "name": "百度千帆",
         "env_key": "QIANFAN_API_KEY",
-        "models": [
-            "qianfan/ernie-4.0-8k",
-            "qianfan/ernie-4.0-turbo-8k", 
-            "qianfan/ernie-3.5-8k",
-            "qianfan/deepseek-v3",
-            "qianfan/qwen3.5-plus"
-        ],
-        "primary": "qianfan/ernie-4.0-8k",
         "get_key_url": "https://console.bce.baidu.com/qianfan/"
     },
     "qwen": {
         "name": "阿里云（通义千问）",
         "env_key": "MODELSTUDIO_API_KEY",
-        "models": [
-            "qwen/qwen3.5-plus",
-            "qwen/qwen3.5-turbo",
-            "qwen/qwen3-72b-instruct",
-            "qwen/qwen2.5-72b-instruct"
-        ],
-        "primary": "qwen/qwen3.5-plus",
         "get_key_url": "https://dashscope.console.aliyun.com/"
     },
     "openai": {
         "name": "OpenAI",
         "env_key": "OPENAI_API_KEY",
-        "models": [
-            "openai/gpt-4o",
-            "openai/gpt-4o-mini",
-            "openai/gpt-4-turbo",
-            "openai/gpt-3.5-turbo"
-        ],
-        "primary": "openai/gpt-4o-mini",
         "get_key_url": "https://platform.openai.com/api-keys"
     },
     "moonshot": {
         "name": "Kimi（月之暗面）",
         "env_key": "MOONSHOT_API_KEY",
-        "models": [
-            "moonshot/kimi-k2.5",
-            "moonshot/moonshot-v1-128k",
-            "moonshot/moonshot-v1-32k"
-        ],
-        "primary": "moonshot/kimi-k2.5",
         "get_key_url": "https://platform.moonshot.cn/"
     },
     "minimax": {
         "name": "MiniMax",
         "env_key": "MINIMAX_API_KEY",
-        "models": [
-            "minimax/abab6.5s-chat",
-            "minimax/abab6.5g-chat",
-            "minimax/abab5.5-chat"
-        ],
-        "primary": "minimax/abab6.5s-chat",
         "get_key_url": "https://www.minimaxi.com/"
     },
     "volcengine": {
         "name": "火山引擎（字节）",
         "env_key": "VOLCANO_ENGINE_API_KEY",
-        "models": [
-            "volcengine/doubao-pro-256k",
-            "volcengine/doubao-pro-32k",
-            "volcengine/doubao-lite-32k"
-        ],
-        "primary": "volcengine/doubao-pro-32k",
         "get_key_url": "https://console.volcengine.com/ark"
     },
     "anthropic": {
         "name": "Anthropic (Claude)",
         "env_key": "ANTHROPIC_API_KEY",
-        "models": [
-            "anthropic/claude-sonnet-4-20250514",
-            "anthropic/claude-3-5-sonnet",
-            "anthropic/claude-3-haiku"
-        ],
-        "primary": "anthropic/claude-3-5-sonnet",
         "get_key_url": "https://console.anthropic.com/"
     },
     "deepseek": {
         "name": "DeepSeek",
         "env_key": "DEEPSEEK_API_KEY",
-        "models": [
-            "deepseek/deepseek-chat",
-            "deepseek/deepseek-reasoner"
-        ],
-        "primary": "deepseek/deepseek-chat",
         "get_key_url": "https://platform.deepseek.com/"
     },
     "zai": {
         "name": "智谱 AI (GLM)",
         "env_key": "ZAI_API_KEY",
-        "models": [
-            "zai/glm-5",
-            "zai/glm-4.7",
-            "zai/glm-4.6"
-        ],
-        "primary": "zai/glm-5",
         "get_key_url": "https://open.bigmodel.cn/"
     }
+}
+
+# 备用模型列表（动态获取失败时使用）
+FALLBACK_MODELS = {
+    "qianfan": "qianfan/ernie-4.0-8k",
+    "qwen": "qwen/qwen3.5-plus",
+    "openai": "openai/gpt-4o-mini",
+    "moonshot": "moonshot/kimi-k2.5",
+    "minimax": "minimax/abab6.5s-chat",
+    "volcengine": "volcengine/doubao-pro-32k",
+    "anthropic": "anthropic/claude-3-5-sonnet",
+    "deepseek": "deepseek/deepseek-chat",
+    "zai": "zai/glm-5"
 }
 # ===================================
 
@@ -206,8 +161,8 @@ class InstallWizard:
         ]
         self.current_step = 0
         
-        # 服务商列表（从 PROVIDER_MODELS 获取）
-        self.providers = {k: v["name"] for k, v in PROVIDER_MODELS.items()}
+        # 服务商列表
+        self.providers = {k: v["name"] for k, v in PROVIDER_INFO.items()}
         
         # 创建页面
         self.pages = []
@@ -495,7 +450,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         combo_frame.pack(pady=10)
         
         # 服务商列表（显示中文名称）
-        provider_names = [v["name"] for v in PROVIDER_MODELS.values()]
+        provider_names = [v["name"] for v in PROVIDER_INFO.values()]
         
         self.provider_combo = ttk.Combobox(combo_frame, values=provider_names, state='readonly', width=35, font=(FONT_FAMILY, 11))
         self.provider_combo.pack(pady=5)
@@ -505,7 +460,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         def open_get_key():
             provider_name = self.provider_combo.get()
             # 根据名称找到对应的 provider_id
-            for pid, info in PROVIDER_MODELS.items():
+            for pid, info in PROVIDER_INFO.items():
                 if info["name"] == provider_name:
                     webbrowser.open(info["get_key_url"])
                     break
@@ -530,7 +485,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         provider_name = self.provider_combo.get()
         if provider_name:
             # 根据名称找到对应的 provider_id
-            for pid, info in PROVIDER_MODELS.items():
+            for pid, info in PROVIDER_INFO.items():
                 if info["name"] == provider_name:
                     self.provider.set(pid)  # 存储 provider_id
                     break
@@ -852,8 +807,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             self.apikey_status.config(text="请输入 API Key", foreground='red')
             return
         
-        # 从 PROVIDER_MODELS 获取配置
-        provider_config = PROVIDER_MODELS.get(provider_id, {})
+        # 从 PROVIDER_INFO 获取配置
+        provider_config = PROVIDER_INFO.get(provider_id, {})
         
         # 简单验证：长度检查（至少 20 个字符）
         if len(key) < 20:
@@ -870,7 +825,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         # 显示服务商中文名称
         provider_id = self.provider.get()
-        provider_name = PROVIDER_MODELS.get(provider_id, {}).get("name", provider_id)
+        provider_name = PROVIDER_INFO.get(provider_id, {}).get("name", provider_id)
         self.confirm_provider.config(text=f"服务商：{provider_name}")
         
         # 隐藏 API Key 中间部分
@@ -1204,21 +1159,20 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
     
     def configure_api_key(self):
-        """配置 API Key 和模型"""
+        """配置 API Key 和模型（动态获取模型）"""
         provider_id = self.provider.get()  # 获取 provider_id（如 qianfan, qwen）
         api_key = self.api_key.get()
         
         if not provider_id or not api_key:
             return
         
-        # 从 PROVIDER_MODELS 获取配置
-        provider_config = PROVIDER_MODELS.get(provider_id, {})
+        # 从 PROVIDER_INFO 获取配置
+        provider_config = PROVIDER_INFO.get(provider_id, {})
         if not provider_config:
             print(f"未知服务商: {provider_id}")
             return
         
         env_key = provider_config.get("env_key", f"{provider_id.upper()}_API_KEY")
-        primary_model = provider_config.get("primary", "")
         
         # 查找 openclaw 命令路径
         openclaw_paths = [
@@ -1241,12 +1195,74 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             print("未找到 openclaw 命令，跳过配置")
             return
         
+        # 动态获取可用模型
+        primary_model = None
         try:
-            # 1. 写入配置文件（使用正确的格式）
+            self.root.after(0, lambda: self.update_progress(71, "获取可用模型列表..."))
+            result = subprocess.run(
+                [openclaw_cmd, "models", "list", "--all", "--json"],
+                capture_output=True, text=True, shell=True, timeout=60
+            )
+            
+            if result.returncode == 0 and result.stdout:
+                models_data = json.loads(result.stdout)
+                print(f"获取到 {len(models_data)} 个模型")
+                
+                # 筛选可用聊天模型
+                chat_models = []
+                for model in models_data:
+                    model_id = model.get("id", "")
+                    tags = model.get("tags", [])
+                    context_window = model.get("contextWindow", 0)
+                    
+                    # 排除 reasoning 模型（不能聊天）
+                    if "reasoning" in tags:
+                        continue
+                    
+                    # 只选当前服务商的模型
+                    if not model_id.startswith(f"{provider_id}/"):
+                        continue
+                    
+                    # 计算优先级分数
+                    score = 0
+                    model_name = model_id.lower()
+                    
+                    # 优先选带 plus/chat/turbo 的
+                    if "plus" in model_name:
+                        score += 100
+                    if "chat" in model_name:
+                        score += 80
+                    if "turbo" in model_name:
+                        score += 60
+                    
+                    # 上下文越大越好
+                    score += min(context_window / 1000, 50)
+                    
+                    chat_models.append((model_id, score, context_window))
+                
+                # 按分数排序
+                chat_models.sort(key=lambda x: x[1], reverse=True)
+                
+                if chat_models:
+                    primary_model = chat_models[0][0]
+                    print(f"✓ 动态选择模型: {primary_model} (分数: {chat_models[0][1]:.0f})")
+                else:
+                    print("未找到符合条件的聊天模型，使用备用模型")
+            else:
+                print(f"获取模型列表失败: {result.stderr}")
+        except Exception as e:
+            print(f"动态获取模型失败: {e}")
+        
+        # 使用备用模型
+        if not primary_model:
+            primary_model = FALLBACK_MODELS.get(provider_id, f"{provider_id}/default")
+            print(f"✓ 使用备用模型: {primary_model}")
+        
+        try:
+            # 1. 写入配置文件
             config_path = os.path.expanduser("~/.openclaw/openclaw.json")
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
             
-            # 读取现有配置
             config = {}
             if os.path.exists(config_path):
                 try:
@@ -1255,12 +1271,10 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 except:
                     pass
             
-            # 设置 env 中的 API Key
             if "env" not in config:
                 config["env"] = {}
             config["env"][env_key] = api_key
             
-            # 设置 agents.defaults.model.primary
             if "agents" not in config:
                 config["agents"] = {}
             if "defaults" not in config["agents"]:
@@ -1269,18 +1283,20 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 config["agents"]["defaults"]["model"] = {}
             config["agents"]["defaults"]["model"]["primary"] = primary_model
             
-            # 写回配置文件
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
             
             print(f"✓ API Key 配置成功: {env_key}")
             print(f"✓ 默认模型: {primary_model}")
             
-            # 2. 也通过命令行设置（确保生效）
+            # 2. 通过命令行设置
             subprocess.run(
                 [openclaw_cmd, "config", "set", "agents.defaults.model.primary", primary_model],
                 shell=True, capture_output=True, text=True, timeout=30
             )
+            
+        except Exception as e:
+            print(f"配置警告: {e}")
             
             # 3. 运行 doctor --fix（可选，清理残留问题）
             self.root.after(0, lambda: self.update_progress(72, "检查配置..."))

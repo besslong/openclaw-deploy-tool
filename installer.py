@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.2.4"
+VERSION = "3.2.5"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1254,16 +1254,25 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                               shell=True, capture_output=True, timeout=120)
                 self.root.after(0, lambda: self.update_progress(94, "PM2 安装完成 ✓"))
             
-            # 3. 用 PM2 启动 OpenClaw（使用官方命令）
+            # 3. 用 PM2 启动 OpenClaw（正确的命令格式）
             self.root.after(0, lambda: self.update_progress(95, "启动 OpenClaw 服务..."))
             
-            # 使用官方命令，不写死路径
-            subprocess.run([
-                "pm2", "start", openclaw_cmd,
+            # 关键：直接用 openclaw 命令（不是路径），让 PM2 从 PATH 找
+            result = subprocess.run([
+                "pm2", "start", "openclaw",
                 "--name", "openclaw",
                 "--interpreter", "none",
                 "--", "gateway"
-            ], shell=True, capture_output=True, timeout=60)
+            ], shell=True, capture_output=True, text=True, timeout=60)
+            
+            if result.returncode != 0:
+                print(f"PM2 启动失败: {result.stderr}")
+            else:
+                print(f"PM2 启动成功: {result.stdout}")
+            
+            # 等待 PM2 启动完成
+            import time
+            time.sleep(3)
             
             # 4. 保存 PM2 进程列表
             subprocess.run(["pm2", "save"], shell=True, capture_output=True, timeout=30)

@@ -666,25 +666,6 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         ttk.Label(info_frame, text="", font=(FONT_FAMILY, 8)).pack()  # 空行
         
-        # 按钮
-        btn_frame = ttk.Frame(info_frame)
-        btn_frame.pack(fill='x', pady=10)
-        
-        def copy_url():
-            self.root.clipboard_clear()
-            url = f"http://127.0.0.1:18789/#token={self.finish_token}" if self.finish_token else f"http://127.0.0.1:18789"
-            self.root.clipboard_append(url)
-            messagebox.showinfo("提示", "地址已复制到剪贴板")
-        
-        def open_browser():
-            if self.finish_token:
-                webbrowser.open(f"http://127.0.0.1:18789/#token={self.finish_token}")
-            else:
-                webbrowser.open("http://127.0.0.1:18789")
-        
-        ttk.Button(btn_frame, text="复制地址", command=copy_url).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="打开浏览器", command=open_browser).pack(side='left', padx=5)
-        
         # 提示
         ttk.Label(frame, text="安装完成！服务已启动。", font=(FONT_FAMILY, 11, 'bold'), foreground='green').pack(pady=5)
         ttk.Label(frame, text="如果浏览器暂时打不开，请等待1-2分钟后再试。", font=(FONT_FAMILY, 10), foreground='gray').pack(pady=2)
@@ -1284,14 +1265,29 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             config["agents"]["defaults"]["model"]["primary"] = primary_model
             
             # 设置模型白名单（用户只能看到这些模型）
+            models_whitelist = {}
+            
+            # 1. 确保 primary_model 在第一位（必须）
+            if primary_model:
+                short_name = primary_model.split("/")[-1]
+                models_whitelist[primary_model] = {"alias": short_name}
+                print(f"✓ 默认模型（白名单第 1 个）: {primary_model}")
+            
+            # 2. 补充其他推荐模型（最多 5 个，避免重复，总数不超过 6 个）
             if chat_models:
-                models_whitelist = {}
-                for model_id, score, _ in chat_models[:6]:  # 最多 6 个模型
-                    # 提取模型简称作为 alias
-                    short_name = model_id.split("/")[-1]
-                    models_whitelist[model_id] = {"alias": short_name}
+                for model_id, score, _ in chat_models[:5]:
+                    if model_id not in models_whitelist:
+                        short_name = model_id.split("/")[-1]
+                        models_whitelist[model_id] = {"alias": short_name}
+                
+                print(f"✓ 模型白名单：共 {len(models_whitelist)} 个模型")
+                print(f"  列表：{list(models_whitelist.keys())}")
+            
+            # 3. 设置到配置中（如果白名单不为空）
+            if models_whitelist:
                 config["agents"]["defaults"]["models"] = models_whitelist
-                print(f"✓ 模型白名单: {list(models_whitelist.keys())}")
+            
+
             
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)

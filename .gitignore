@@ -10,7 +10,7 @@ ENV/
 # PyInstaller
 build/
 dist/
-*.spec
+# *.spec  # 保留 spec 文件，打包配置需要
 
 # 数据库
 *.db

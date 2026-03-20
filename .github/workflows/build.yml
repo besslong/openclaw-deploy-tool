@@ -21,7 +21,33 @@ jobs:
       with:
         python-version: '3.12'
 
-    - name: Install dependencies
+    - name: Set up Node.js (for pre-bundling OpenClaw)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        registry-url: 'https://registry.npmmirror.com'
+
+    - name: Pre-bundle OpenClaw (混合方案：预打包核心)
+      shell: bash
+      run: |
+        echo "📦 预下载 OpenClaw..."
+        mkdir -p bundle
+        
+        # 使用 npm pack 下载 OpenClaw
+        npm pack openclaw --registry https://registry.npmmirror.com
+        tar -xzf openclaw-*.tgz
+        
+        # 重命名为 openclaw
+        mv package bundle/openclaw
+        
+        # 清理
+        rm -f openclaw-*.tgz
+        
+        echo "✅ 预打包完成！"
+        echo "📊 OpenClaw 大小："
+        du -sh bundle/openclaw/
+
+    - name: Install Python dependencies
       run: |
         pip install pyinstaller requests
       shell: bash
@@ -30,6 +56,12 @@ jobs:
       run: |
         pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Installer" installer.py
       shell: bash
+
+    - name: Check installer size
+      shell: bash
+      run: |
+        echo "📦 安装包大小："
+        ls -lh dist/
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4

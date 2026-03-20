@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.1"
+VERSION = "3.4.0"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1066,7 +1066,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         raise Exception("Git 安装失败，请手动安装")
     
     def install_openclaw(self):
-        """安装 OpenClaw"""
+        """安装 OpenClaw（混合方案：预打包优先，失败则在线下载）"""
         # 创建安装目录
         install_dir = self.install_path.get()
         os.makedirs(install_dir, exist_ok=True)
@@ -1083,6 +1083,79 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         except:
             pass  # 未安装，继续安装
         
+        # ========== 混合方案：优先使用预打包的 OpenClaw ==========
+        bundle_dir = self._get_bundle_dir()
+        
+        if bundle_dir and os.path.exists(bundle_dir):
+            self.root.after(0, lambda: self.update_progress(45, "使用预打包的 OpenClaw..."))
+            if self._install_from_bundle(bundle_dir):
+                self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓ (离线)"))
+                return
+            else:
+                self.root.after(0, lambda: self.update_progress(45, "预打包无效，在线下载..."))
+        
+        # ========== 回退：在线下载 ==========
+        self._install_openclaw_online()
+        self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
+    
+    def _get_bundle_dir(self):
+        """获取预打包目录路径"""
+        # PyInstaller 打包后的路径
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+            bundle_dir = os.path.join(base_dir, 'bundle', 'openclaw')
+            if os.path.exists(bundle_dir):
+                return bundle_dir
+        
+        # 开发环境
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        bundle_dir = os.path.join(script_dir, 'bundle', 'openclaw')
+        if os.path.exists(bundle_dir):
+            return bundle_dir
+        
+        return None
+    
+    def _install_from_bundle(self, bundle_dir):
+        """从预打包目录安装 OpenClaw（离线秒装）"""
+        try:
+            import shutil
+            
+            # 检查 bundle 目录结构
+            if not os.path.exists(os.path.join(bundle_dir, 'package.json')):
+                print(f"⚠️ 预打包目录无效: {bundle_dir}")
+                return False
+            
+            print(f"📦 从预打包目录安装: {bundle_dir}")
+            
+            # 复制到 npm 全局目录
+            npm_global_dir = os.path.expandvars(r"%APPDATA%\npm\node_modules")
+            target_dir = os.path.join(npm_global_dir, 'openclaw')
+            
+            os.makedirs(npm_global_dir, exist_ok=True)
+            
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir)
+            
+            shutil.copytree(bundle_dir, target_dir)
+            
+            # 创建命令行工具
+            npm_dir = os.path.expandvars(r"%APPDATA%\npm")
+            cmd_file = os.path.join(npm_dir, 'openclaw.cmd')
+            
+            with open(cmd_file, 'w') as f:
+                f.write(f'''@echo off
+node "{target_dir}\\bin\\openclaw.mjs" %*
+''')
+            
+            print(f"✅ OpenClaw 已安装到: {target_dir}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 预打包安装失败: {e}")
+            return False
+    
+    def _install_openclaw_online(self):
+        """在线下载安装 OpenClaw"""
         # 查找 npm
         npm_paths = [
             r"C:\Program Files\nodejs\npm.cmd",
@@ -1104,19 +1177,18 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         if not npm_cmd:
             raise Exception("找不到 npm，请确保 Node.js 已正确安装")
         
-        # 清理可能存在的旧版本/残留
-        self.root.after(0, lambda: self.update_progress(44, "清理旧版本残留..."))
+        # 清理旧版本
+        self.root.after(0, lambda: self.update_progress(46, "清理旧版本残留..."))
         subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], shell=True, capture_output=True, timeout=30)
         subprocess.run([npm_cmd, "cache", "clean", "--force"], shell=True, capture_output=True, timeout=60)
         
-        # 设置 npm 镜像（加速下载）
+        # 设置 npm 镜像
         self.root.after(0, lambda: self.update_progress(48, "配置 npm 淘宝镜像..."))
         subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True, capture_output=True)
         
-        # 安装 openclaw（使用淘宝镜像）
+        # 安装 openclaw
         self.root.after(0, lambda: self.update_progress(50, "正在下载 OpenClaw..."))
         
-        # 多次尝试淘宝镜像
         max_retries = 3
         for retry in range(max_retries):
             self.root.after(0, lambda r=retry: self.update_progress(52 + r*5, f"下载中... (尝试 {r+1}/{max_retries})"))
@@ -1136,8 +1208,6 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         if result.returncode != 0:
             raise Exception(f"OpenClaw 下载失败。请手动执行：\nnpm install -g openclaw --registry https://registry.npmmirror.com")
-        
-        self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
     
     def configure_api_key(self):
         """配置 API Key 和模型（动态获取模型）"""

@@ -1,11 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
-
+# OpenClaw 部署工具 - PyInstaller 配置
+# 混合方案：预打包 OpenClaw 核心
 
 a = Analysis(
     ['installer.py'],
     pathex=[],
     binaries=[],
-    datas=[('openclaw_logo.png', '.'), ('openclaw_logo.ico', '.')],
+    datas=[
+        ('openclaw_logo.png', '.'),
+        ('openclaw_logo.ico', '.'),
+        ('bundle', 'bundle'),  # 预打包的 OpenClaw
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -22,7 +27,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='OpenClaw-部署工具',
+    name='OpenClaw-Installer',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -35,4 +40,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='openclaw_logo.ico',
 )

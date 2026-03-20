@@ -63,7 +63,7 @@ jobs:
 
     - name: Build with PyInstaller
       run: |
-        pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Installer" installer.py
+        pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Installer" --add-data "bundle;bundle" installer.py
       shell: bash
 
     - name: Check installer size

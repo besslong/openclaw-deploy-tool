@@ -21,19 +21,57 @@ jobs:
       with:
         python-version: '3.12'
 
+    - name: Set up Node.js (for downloading OpenClaw)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Download offline packages
+      shell: bash
+      run: |
+        echo "📦 下载离线安装包..."
+        mkdir -p bundle
+        
+        # 1. 下载 Node.js (ZIP 版本)
+        echo "⬇️  下载 Node.js v22.14.0..."
+        curl -L -o nodejs.zip "https://npmmirror.com/mirrors/node/v22.14.0/node-v22.14.0-win-x64.zip"
+        unzip -q nodejs.zip
+        mv node-v22.14.0-win-x64 bundle/nodejs
+        rm -f nodejs.zip
+        echo "✅ Node.js 下载完成"
+        
+        # 2. 下载 Git (便携版)
+        echo "⬇️  下载 Git..."
+        curl -L -o git.7z.exe "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/PortableGit-2.49.0-64-bit.7z.exe"
+        7z x git.7z.exe -obundle/git -y
+        rm -f git.7z.exe
+        echo "✅ Git 下载完成"
+        
+        # 3. 下载 OpenClaw
+        echo "⬇️  下载 OpenClaw..."
+        npm pack openclaw --registry https://registry.npmmirror.com
+        tar -xzf openclaw-*.tgz
+        mv package bundle/openclaw
+        rm -f openclaw-*.tgz
+        echo "✅ OpenClaw 下载完成"
+        
+        echo ""
+        echo "📊 离线包大小："
+        du -sh bundle/*
+
     - name: Install Python dependencies
       run: pip install pyinstaller requests
       shell: bash
 
-    - name: Build with PyInstaller
+    - name: Build with PyInstaller (include bundle)
       run: |
-        pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Installer" installer.py
+        pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Installer" --add-data "bundle;bundle" installer.py
       shell: bash
 
     - name: Check installer size
       shell: bash
       run: |
-        echo "📦 安装包大小："
+        echo "📦 最终安装包大小："
         ls -lh dist/
 
     - name: Upload artifact

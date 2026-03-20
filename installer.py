@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.6"
+VERSION = "3.3.7"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1092,25 +1092,52 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.progress_percent.config(text=f"{int(value)}%")
         self.install_status.set(status)
     
+    def _get_bundle_path(self, component):
+        """获取离线安装包路径（PyInstaller --onefile 模式）"""
+        if getattr(sys, 'frozen', False):
+            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        bundle_path = os.path.join(base_dir, 'bundle', component)
+        if os.path.exists(bundle_path):
+            return bundle_path
+        return None
+    
     def install_nodejs(self):
-        """安装 Node.js"""
+        """安装 Node.js（优先离线安装）"""
         # 检查是否已安装
         try:
             result = subprocess.run(["node", "--version"], capture_output=True, text=True, shell=True, timeout=5)
             if result.returncode == 0:
                 version = result.stdout.strip()
-                # 检查版本是否 >= 22
                 major = int(version.replace('v', '').split('.')[0])
                 if major >= 22:
                     self.root.after(0, lambda: self.update_progress(20, f"Node.js {version} 已安装 ✓"))
-                    return  # 已安装正确版本
+                    return
                 else:
-                    # 版本过低，需要升级
                     self.root.after(0, lambda: self.update_progress(15, f"Node.js {version} 版本过低，需要升级到 v22..."))
         except:
-            pass  # 未安装，继续安装
+            pass
         
-        # 下载并安装 Node.js v22
+        # ===== 离线安装 =====
+        bundle_nodejs = self._get_bundle_path('nodejs')
+        if bundle_nodejs:
+            self.root.after(0, lambda: self.update_progress(16, "使用离线包安装 Node.js..."))
+            try:
+                import shutil
+                target_dir = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs")
+                if os.path.exists(target_dir):
+                    shutil.rmtree(target_dir)
+                shutil.copytree(bundle_nodejs, target_dir)
+                self._add_to_path(target_dir)
+                self.root.after(0, lambda: self.update_progress(25, "Node.js 安装完成 ✓ (离线)"))
+                print(f"✓ Node.js 离线安装成功: {target_dir}")
+                return
+            except Exception as e:
+                print(f"⚠️ 离线安装失败: {e}，尝试在线安装...")
+        
+        # ===== 在线安装 =====
         self.root.after(0, lambda: self.update_progress(16, "正在下载 Node.js v22..."))
         nodejs_mirrors = [
             "https://npmmirror.com/mirrors/node/v22.14.0/node-v22.14.0-x64.msi",
@@ -1135,18 +1162,50 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         raise Exception("Node.js 安装失败，请手动安装 v22 或更高版本")
     
+    def _add_to_path(self, path_to_add):
+        """添加路径到系统 PATH"""
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                  r'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 
+                                  0, winreg.KEY_SET_VALUE)
+            current_path, _ = winreg.QueryValueEx(key, 'Path')
+            if path_to_add not in current_path:
+                new_path = current_path + ';' + path_to_add
+                winreg.SetValueEx(key, 'Path', 0, winreg.REG_EXPAND_SZ, new_path)
+            winreg.CloseKey(key)
+        except Exception as e:
+            print(f"⚠️ 添加 PATH 失败: {e}")
+    
     def install_git(self):
-        """安装 Git"""
+        """安装 Git（优先离线安装）"""
         # 检查是否已安装
         try:
             result = subprocess.run(["git", "--version"], capture_output=True, text=True, shell=True, timeout=5)
             if result.returncode == 0:
                 self.root.after(0, lambda: self.update_progress(35, "Git 已安装 ✓"))
-                return  # 已安装
+                return
         except:
             pass
         
-        # 使用 winget 安装
+        # ===== 离线安装 =====
+        bundle_git = self._get_bundle_path('git')
+        if bundle_git:
+            self.root.after(0, lambda: self.update_progress(30, "使用离线包安装 Git..."))
+            try:
+                import shutil
+                target_dir = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Git")
+                if os.path.exists(target_dir):
+                    shutil.rmtree(target_dir)
+                shutil.copytree(bundle_git, target_dir)
+                self._add_to_path(os.path.join(target_dir, 'cmd'))
+                self.root.after(0, lambda: self.update_progress(35, "Git 安装完成 ✓ (离线)"))
+                print(f"✓ Git 离线安装成功: {target_dir}")
+                return
+            except Exception as e:
+                print(f"⚠️ 离线安装失败: {e}，尝试在线安装...")
+        
+        # ===== 在线安装 =====
         self.root.after(0, lambda: self.update_progress(30, "正在安装 Git..."))
         try:
             result = subprocess.run(
@@ -1185,7 +1244,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         raise Exception("Git 安装失败，请手动安装")
     
     def install_openclaw(self):
-        """安装 OpenClaw"""
+        """安装 OpenClaw（优先离线安装）"""
         # 创建安装目录
         install_dir = self.install_path.get()
         os.makedirs(install_dir, exist_ok=True)
@@ -1200,30 +1259,36 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 self.root.after(0, lambda: self.update_progress(70, f"OpenClaw {version} 已安装 ✓"))
                 return
         except:
-            pass  # 未安装，继续安装
+            pass
         
-        # 查找 npm
-        npm_paths = [
-            r"C:\Program Files\nodejs\npm.cmd",
-            r"C:\Program Files (x86)\nodejs\npm.cmd",
-            os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
-            "npm"
-        ]
-        
-        npm_cmd = None
-        for path in npm_paths:
+        # ===== 离线安装 =====
+        bundle_openclaw = self._get_bundle_path('openclaw')
+        if bundle_openclaw:
+            self.root.after(0, lambda: self.update_progress(45, "使用离线包安装 OpenClaw..."))
             try:
-                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
-                if result.returncode == 0:
-                    npm_cmd = path
-                    break
-            except:
-                continue
+                import shutil
+                npm_global_dir = os.path.expandvars(r"%APPDATA%\npm\node_modules")
+                target_dir = os.path.join(npm_global_dir, 'openclaw')
+                os.makedirs(npm_global_dir, exist_ok=True)
+                if os.path.exists(target_dir):
+                    shutil.rmtree(target_dir)
+                shutil.copytree(bundle_openclaw, target_dir)
+                
+                # 创建命令行工具
+                npm_dir = os.path.expandvars(r"%APPDATA%\npm")
+                cmd_file = os.path.join(npm_dir, 'openclaw.cmd')
+                node_exe = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs", "node.exe")
+                with open(cmd_file, 'w') as f:
+                    f.write(f'''@echo off
+"{node_exe}" "{target_dir}\\bin\\openclaw.mjs" %*
+''')
+                self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓ (离线)"))
+                print(f"✓ OpenClaw 离线安装成功: {target_dir}")
+                return
+            except Exception as e:
+                print(f"⚠️ 离线安装失败: {e}，尝试在线安装...")
         
-        if not npm_cmd:
-            raise Exception("找不到 npm，请确保 Node.js 已正确安装")
-        
-        # 清理可能存在的旧版本/残留
+        # ===== 在线安装 =====
         self.root.after(0, lambda: self.update_progress(44, "清理旧版本残留..."))
         subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], shell=True, capture_output=True, timeout=30)
         subprocess.run([npm_cmd, "cache", "clean", "--force"], shell=True, capture_output=True, timeout=60)

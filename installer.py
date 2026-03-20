@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.8"
+VERSION = "3.3.9"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1280,7 +1280,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 node_exe = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs", "node.exe")
                 with open(cmd_file, 'w') as f:
                     f.write(f'''@echo off
-"{node_exe}" "{target_dir}\\bin\\openclaw.mjs" %*
+"{node_exe}" "{target_dir}\\openclaw.mjs" %*
 ''')
                 self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓ (离线)"))
                 print(f"✓ OpenClaw 离线安装成功: {target_dir}")
@@ -1289,6 +1289,26 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 print(f"⚠️ 离线安装失败: {e}，尝试在线安装...")
         
         # ===== 在线安装 =====
+        # 查找 npm
+        npm_paths = [
+            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs", "npm.cmd"),
+            os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
+            "npm"
+        ]
+        
+        npm_cmd = None
+        for path in npm_paths:
+            try:
+                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
+                if result.returncode == 0:
+                    npm_cmd = path
+                    break
+            except:
+                continue
+        
+        if not npm_cmd:
+            raise Exception("找不到 npm，请确保 Node.js 已正确安装")
+        
         self.root.after(0, lambda: self.update_progress(44, "清理旧版本残留..."))
         subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], shell=True, capture_output=True, timeout=30)
         subprocess.run([npm_cmd, "cache", "clean", "--force"], shell=True, capture_output=True, timeout=60)

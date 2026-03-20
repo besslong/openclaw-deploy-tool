@@ -974,25 +974,69 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.install_status.set(status)
     
     def install_nodejs(self):
-        """安装 Node.js"""
-        # 检查是否已安装
+        """安装 Node.js（混合方案：预打包优先，失败则在线安装）"""
+        # 检查是否已安装正确版本
         try:
             result = subprocess.run(["node", "--version"], capture_output=True, text=True, shell=True, timeout=5)
             if result.returncode == 0:
                 version = result.stdout.strip()
-                # 检查版本是否 >= 22
                 major = int(version.replace('v', '').split('.')[0])
                 if major >= 22:
-                    self.root.after(0, lambda: self.update_progress(20, f"Node.js {version} 已安装 ✓"))
-                    return  # 已安装正确版本
+                    self.root.after(0, lambda: self.update_progress(25, f"Node.js {version} 已安装 ✓"))
+                    return
                 else:
-                    # 版本过低，需要升级
-                    self.root.after(0, lambda: self.update_progress(15, f"Node.js {version} 版本过低，需要升级到 v22..."))
+                    self.root.after(0, lambda: self.update_progress(15, f"Node.js {version} 版本过低，需要升级..."))
         except:
-            pass  # 未安装，继续安装
+            pass
         
-        # 下载并安装 Node.js v22
+        # ========== 优先使用预打包的 Node.js ==========
+        bundle_nodejs = self._get_bundle_path('nodejs')
+        if bundle_nodejs and os.path.exists(bundle_nodejs):
+            self.root.after(0, lambda: self.update_progress(16, "使用预打包的 Node.js..."))
+            if self._install_nodejs_from_bundle(bundle_nodejs):
+                self.root.after(0, lambda: self.update_progress(25, "Node.js 安装完成 ✓ (离线)"))
+                return
+        
+        # ========== 回退：在线下载安装 ==========
+        self._install_nodejs_online()
+        self.root.after(0, lambda: self.update_progress(25, "Node.js 安装完成 ✓"))
+    
+    def _install_nodejs_from_bundle(self, bundle_dir):
+        """从预打包目录安装 Node.js（离线）"""
+        try:
+            import shutil
+            
+            # 检查 bundle 目录
+            node_exe = os.path.join(bundle_dir, 'node.exe')
+            if not os.path.exists(node_exe):
+                print(f"⚠️ 预打包 Node.js 无效: {bundle_dir}")
+                return False
+            
+            print(f"📦 从预打包安装 Node.js: {bundle_dir}")
+            
+            # 复制到 Program Files
+            target_dir = r"C:\Program Files\nodejs"
+            
+            # 如果目标存在，先删除
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir)
+            
+            shutil.copytree(bundle_dir, target_dir)
+            
+            # 添加到 PATH（系统环境变量）
+            self._add_to_path(target_dir)
+            
+            print(f"✅ Node.js 已安装到: {target_dir}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 预打包 Node.js 安装失败: {e}")
+            return False
+    
+    def _install_nodejs_online(self):
+        """在线下载安装 Node.js"""
         self.root.after(0, lambda: self.update_progress(16, "正在下载 Node.js v22..."))
+        
         nodejs_mirrors = [
             "https://npmmirror.com/mirrors/node/v22.14.0/node-v22.14.0-x64.msi",
             "https://mirrors.huaweicloud.com/nodejs/v22.14.0/node-v22.14.0-x64.msi"
@@ -1003,39 +1047,82 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         for url in nodejs_mirrors:
             try:
                 download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
-                subprocess.run(download_cmd, shell=True, check=True, timeout=120)
+                subprocess.run(download_cmd, shell=True, check=True, timeout=180)
                 
                 if os.path.exists(installer_path) and os.path.getsize(installer_path) > 20000000:
                     self.root.after(0, lambda: self.update_progress(20, "正在安装 Node.js..."))
-                    # 静默安装
                     subprocess.run(f'msiexec /i "{installer_path}" /quiet /norestart', shell=True, check=True, timeout=300)
-                    self.root.after(0, lambda: self.update_progress(25, "Node.js 安装完成 ✓"))
                     return
-            except Exception as e:
+            except:
                 continue
         
         raise Exception("Node.js 安装失败，请手动安装 v22 或更高版本")
     
     def install_git(self):
-        """安装 Git"""
+        """安装 Git（混合方案：预打包优先，失败则在线安装）"""
         # 检查是否已安装
         try:
             result = subprocess.run(["git", "--version"], capture_output=True, text=True, shell=True, timeout=5)
             if result.returncode == 0:
-                self.root.after(0, lambda: self.update_progress(35, "Git 已安装 ✓"))
-                return  # 已安装
+                self.root.after(0, lambda: self.update_progress(40, "Git 已安装 ✓"))
+                return
         except:
             pass
         
-        # 使用 winget 安装
+        # ========== 优先使用预打包的 Git ==========
+        bundle_git = self._get_bundle_path('git')
+        if bundle_git and os.path.exists(bundle_git):
+            self.root.after(0, lambda: self.update_progress(30, "使用预打包的 Git..."))
+            if self._install_git_from_bundle(bundle_git):
+                self.root.after(0, lambda: self.update_progress(40, "Git 安装完成 ✓ (离线)"))
+                return
+        
+        # ========== 回退：在线安装 ==========
+        self._install_git_online()
+        self.root.after(0, lambda: self.update_progress(40, "Git 安装完成 ✓"))
+    
+    def _install_git_from_bundle(self, bundle_dir):
+        """从预打包目录安装 Git（离线）"""
+        try:
+            import shutil
+            
+            # 检查 bundle 目录
+            git_exe = os.path.join(bundle_dir, 'cmd', 'git.exe')
+            if not os.path.exists(git_exe):
+                print(f"⚠️ 预打包 Git 无效: {bundle_dir}")
+                return False
+            
+            print(f"📦 从预打包安装 Git: {bundle_dir}")
+            
+            # 复制到 Program Files
+            target_dir = r"C:\Program Files\Git"
+            
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir)
+            
+            shutil.copytree(bundle_dir, target_dir)
+            
+            # 添加到 PATH
+            self._add_to_path(os.path.join(target_dir, 'cmd'))
+            
+            print(f"✅ Git 已安装到: {target_dir}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ 预打包 Git 安装失败: {e}")
+            return False
+    
+    def _install_git_online(self):
+        """在线下载安装 Git"""
         self.root.after(0, lambda: self.update_progress(30, "正在安装 Git..."))
+        
+        # 先尝试 winget
         try:
             result = subprocess.run(
                 ["winget", "install", "Git.Git", "--accept-source-agreements", "--accept-package-agreements"],
                 shell=True, capture_output=True, text=True, timeout=180
             )
             if result.returncode == 0:
-                self.root.after(0, lambda: self.update_progress(35, "Git 安装完成 ✓"))
                 return
         except:
             pass
@@ -1043,8 +1130,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         # 下载安装包
         self.root.after(0, lambda: self.update_progress(31, "正在下载 Git 安装包..."))
         git_mirrors = [
-            "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",  # 淘宝
-            "https://mirrors.cloud.tencent.com/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",  # 腾讯云
+            "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",
+            "https://mirrors.cloud.tencent.com/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",
         ]
         
         installer_path = os.path.join(os.environ.get("TEMP", "."), "git_installer.exe")
@@ -1052,18 +1139,42 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         for url in git_mirrors:
             try:
                 download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
-                subprocess.run(download_cmd, shell=True, check=True, timeout=120)
+                subprocess.run(download_cmd, shell=True, check=True, timeout=180)
                 
                 if os.path.exists(installer_path) and os.path.getsize(installer_path) > 10000000:
-                    self.root.after(0, lambda: self.update_progress(33, "正在安装 Git..."))
-                    # 静默安装
                     subprocess.run(f'"{installer_path}" /VERYSILENT /NORESTART', shell=True, check=True, timeout=300)
-                    self.root.after(0, lambda: self.update_progress(35, "Git 安装完成 ✓"))
                     return
-            except Exception as e:
+            except:
                 continue
         
         raise Exception("Git 安装失败，请手动安装")
+    
+    def _get_bundle_path(self, component):
+        """获取预打包组件路径"""
+        if getattr(sys, 'frozen', False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        bundle_path = os.path.join(base_dir, 'bundle', component)
+        if os.path.exists(bundle_path):
+            return bundle_path
+        return None
+    
+    def _add_to_path(self, path_to_add):
+        """添加路径到系统 PATH"""
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 
+                                  r'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 
+                                  0, winreg.KEY_SET_VALUE)
+            current_path, _ = winreg.QueryValueEx(key, 'Path')
+            if path_to_add not in current_path:
+                new_path = current_path + ';' + path_to_add
+                winreg.SetValueEx(key, 'Path', 0, winreg.REG_EXPAND_SZ, new_path)
+            winreg.CloseKey(key)
+        except Exception as e:
+            print(f"⚠️ 添加 PATH 失败: {e}")
     
     def install_openclaw(self):
         """安装 OpenClaw（混合方案：预打包优先，失败则在线下载）"""
@@ -1072,60 +1183,40 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         os.makedirs(install_dir, exist_ok=True)
         
         # 检查是否已安装正确版本
-        self.root.after(0, lambda: self.update_progress(42, "检查 OpenClaw 安装状态..."))
+        self.root.after(0, lambda: self.update_progress(45, "检查 OpenClaw 安装状态..."))
         
         try:
             result = subprocess.run(["openclaw", "--version"], capture_output=True, text=True, shell=True, timeout=10)
             if result.returncode == 0:
                 version = result.stdout.strip().split()[1] if len(result.stdout.strip().split()) > 1 else "unknown"
-                self.root.after(0, lambda: self.update_progress(70, f"OpenClaw {version} 已安装 ✓"))
+                self.root.after(0, lambda: self.update_progress(85, f"OpenClaw {version} 已安装 ✓"))
                 return
         except:
-            pass  # 未安装，继续安装
+            pass
         
-        # ========== 混合方案：优先使用预打包的 OpenClaw ==========
-        bundle_dir = self._get_bundle_dir()
-        
+        # ========== 优先使用预打包的 OpenClaw ==========
+        bundle_dir = self._get_bundle_path('openclaw')
         if bundle_dir and os.path.exists(bundle_dir):
-            self.root.after(0, lambda: self.update_progress(45, "使用预打包的 OpenClaw..."))
-            if self._install_from_bundle(bundle_dir):
-                self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓ (离线)"))
+            self.root.after(0, lambda: self.update_progress(50, "使用预打包的 OpenClaw..."))
+            if self._install_openclaw_from_bundle(bundle_dir):
+                self.root.after(0, lambda: self.update_progress(85, "OpenClaw 安装完成 ✓ (离线)"))
                 return
-            else:
-                self.root.after(0, lambda: self.update_progress(45, "预打包无效，在线下载..."))
         
         # ========== 回退：在线下载 ==========
         self._install_openclaw_online()
-        self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
+        self.root.after(0, lambda: self.update_progress(85, "OpenClaw 安装完成 ✓"))
     
-    def _get_bundle_dir(self):
-        """获取预打包目录路径"""
-        # PyInstaller 打包后的路径
-        if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
-            bundle_dir = os.path.join(base_dir, 'bundle', 'openclaw')
-            if os.path.exists(bundle_dir):
-                return bundle_dir
-        
-        # 开发环境
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        bundle_dir = os.path.join(script_dir, 'bundle', 'openclaw')
-        if os.path.exists(bundle_dir):
-            return bundle_dir
-        
-        return None
-    
-    def _install_from_bundle(self, bundle_dir):
+    def _install_openclaw_from_bundle(self, bundle_dir):
         """从预打包目录安装 OpenClaw（离线秒装）"""
         try:
             import shutil
             
             # 检查 bundle 目录结构
             if not os.path.exists(os.path.join(bundle_dir, 'package.json')):
-                print(f"⚠️ 预打包目录无效: {bundle_dir}")
+                print(f"⚠️ 预打包 OpenClaw 无效: {bundle_dir}")
                 return False
             
-            print(f"📦 从预打包目录安装: {bundle_dir}")
+            print(f"📦 从预打包安装 OpenClaw: {bundle_dir}")
             
             # 复制到 npm 全局目录
             npm_global_dir = os.path.expandvars(r"%APPDATA%\npm\node_modules")
@@ -1151,7 +1242,7 @@ node "{target_dir}\\bin\\openclaw.mjs" %*
             return True
             
         except Exception as e:
-            print(f"❌ 预打包安装失败: {e}")
+            print(f"❌ 预打包 OpenClaw 安装失败: {e}")
             return False
     
     def _install_openclaw_online(self):
@@ -1159,7 +1250,6 @@ node "{target_dir}\\bin\\openclaw.mjs" %*
         # 查找 npm
         npm_paths = [
             r"C:\Program Files\nodejs\npm.cmd",
-            r"C:\Program Files (x86)\nodejs\npm.cmd",
             os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
             "npm"
         ]
@@ -1178,33 +1268,17 @@ node "{target_dir}\\bin\\openclaw.mjs" %*
             raise Exception("找不到 npm，请确保 Node.js 已正确安装")
         
         # 清理旧版本
-        self.root.after(0, lambda: self.update_progress(46, "清理旧版本残留..."))
+        self.root.after(0, lambda: self.update_progress(50, "清理旧版本..."))
         subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], shell=True, capture_output=True, timeout=30)
         subprocess.run([npm_cmd, "cache", "clean", "--force"], shell=True, capture_output=True, timeout=60)
         
-        # 设置 npm 镜像
-        self.root.after(0, lambda: self.update_progress(48, "配置 npm 淘宝镜像..."))
-        subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True, capture_output=True)
-        
         # 安装 openclaw
-        self.root.after(0, lambda: self.update_progress(50, "正在下载 OpenClaw..."))
+        self.root.after(0, lambda: self.update_progress(55, "正在下载 OpenClaw..."))
         
-        max_retries = 3
-        for retry in range(max_retries):
-            self.root.after(0, lambda r=retry: self.update_progress(52 + r*5, f"下载中... (尝试 {r+1}/{max_retries})"))
-            
-            result = subprocess.run(
-                [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
-                capture_output=True, text=True, shell=True, timeout=300
-            )
-            
-            if result.returncode == 0:
-                break
-            
-            if retry < max_retries - 1:
-                self.root.after(0, lambda: self.update_progress(55, "下载失败，重试中..."))
-                import time
-                time.sleep(3)
+        result = subprocess.run(
+            [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
+            capture_output=True, text=True, shell=True, timeout=300
+        )
         
         if result.returncode != 0:
             raise Exception(f"OpenClaw 下载失败。请手动执行：\nnpm install -g openclaw --registry https://registry.npmmirror.com")

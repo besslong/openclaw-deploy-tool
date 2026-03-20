@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.3"
+VERSION = "3.3.4"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -99,6 +99,59 @@ FALLBACK_MODELS = {
     "anthropic": "anthropic/claude-3-5-sonnet",
     "deepseek": "deepseek/deepseek-chat",
     "zai": "zai/glm-5"
+}
+
+# 每个服务商的推荐模型列表（用于白名单）
+PROVIDER_MODELS = {
+    "qianfan": [
+        "qianfan/ernie-4.0-8k",
+        "qianfan/ernie-3.5-8k",
+        "qianfan/ernie-speed-8k",
+        "qianfan/ernie-lite-8k",
+    ],
+    "qwen": [
+        "qwen/qwen3.5-plus",
+        "qwen/qwen3.5-turbo",
+        "qwen/qwen-turbo-latest",
+        "qwen/qwen-plus-latest",
+        "qwen/qwen-max-latest",
+    ],
+    "openai": [
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o",
+        "openai/gpt-4-turbo",
+        "openai/gpt-3.5-turbo",
+    ],
+    "moonshot": [
+        "moonshot/kimi-k2.5",
+        "moonshot/moonshot-v1-8k",
+        "moonshot/moonshot-v1-32k",
+    ],
+    "minimax": [
+        "minimax/abab6.5s-chat",
+        "minimax/abab6.5g-chat",
+        "minimax/abab5.5-chat",
+    ],
+    "volcengine": [
+        "volcengine/doubao-pro-32k",
+        "volcengine/doubao-lite-32k",
+        "volcengine/doubao-pro-128k",
+    ],
+    "anthropic": [
+        "anthropic/claude-3-5-sonnet",
+        "anthropic/claude-3-5-haiku",
+        "anthropic/claude-3-opus",
+    ],
+    "deepseek": [
+        "deepseek/deepseek-chat",
+        "deepseek/deepseek-coder",
+    ],
+    "zai": [
+        "zai/glm-5",
+        "zai/glm-4-plus",
+        "zai/glm-4-air",
+        "zai/glm-4-flash",
+    ],
 }
 # ===================================
 
@@ -1339,15 +1392,24 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 models_whitelist[primary_model] = {"alias": short_name}
                 print(f"✓ 默认模型（白名单第 1 个）: {primary_model}")
             
-            # 2. 补充其他推荐模型（最多 5 个，避免重复，总数不超过 6 个）
+            # 2. 补充其他推荐模型
             if chat_models:
+                # 动态获取成功，用动态结果
                 for model_id, score, _ in chat_models[:5]:
                     if model_id not in models_whitelist:
                         short_name = model_id.split("/")[-1]
                         models_whitelist[model_id] = {"alias": short_name}
-                
-                print(f"✓ 模型白名单：共 {len(models_whitelist)} 个模型")
-                print(f"  列表：{list(models_whitelist.keys())}")
+                print(f"✓ 模型白名单（动态获取）：共 {len(models_whitelist)} 个模型")
+            else:
+                # 动态获取失败，用预设列表
+                provider_models = PROVIDER_MODELS.get(provider_id, [])
+                for model_id in provider_models:
+                    if model_id not in models_whitelist:
+                        short_name = model_id.split("/")[-1]
+                        models_whitelist[model_id] = {"alias": short_name}
+                print(f"✓ 模型白名单（预设列表）：共 {len(models_whitelist)} 个模型")
+            
+            print(f"  列表：{list(models_whitelist.keys())}")
             
             # 3. 设置到配置中（如果白名单不为空）
             if models_whitelist:

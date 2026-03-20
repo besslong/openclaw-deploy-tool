@@ -47,13 +47,25 @@ jobs:
         rm -f git.7z.exe
         echo "✅ Git 下载完成"
         
-        # 3. 下载 OpenClaw
+        # 3. 下载 OpenClaw（用 npm install 获取构建后的完整包）
         echo "⬇️  下载 OpenClaw..."
-        npm pack openclaw --registry https://registry.npmmirror.com
-        tar -xzf openclaw-*.tgz
-        mv package bundle/openclaw
-        rm -f openclaw-*.tgz
+        mkdir -p temp_npm
+        cd temp_npm
+        npm init -y
+        npm install openclaw --registry https://registry.npmmirror.com
+        mv node_modules/openclaw ../bundle/openclaw
+        cd ..
+        rm -rf temp_npm
         echo "✅ OpenClaw 下载完成"
+        
+        # 验证 OpenClaw 包结构
+        echo "📊 验证 OpenClaw 包结构："
+        ls -la bundle/openclaw/
+        if [ -f "bundle/openclaw/dist/entry.mjs" ]; then
+          echo "✅ dist/entry.mjs 存在"
+        else
+          echo "⚠️ dist/entry.mjs 不存在，可能有问题"
+        fi
         
         echo ""
         echo "📊 离线包大小："

@@ -1245,12 +1245,15 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             shutil.copytree(bundle_dir, target_dir)
             
             # 创建命令行工具
+            # 使用 Node.js 的完整路径（因为 PATH 可能还没更新）
+            node_exe = r"C:\Program Files\nodejs\node.exe"
+            
             npm_dir = os.path.expandvars(r"%APPDATA%\npm")
             cmd_file = os.path.join(npm_dir, 'openclaw.cmd')
             
             with open(cmd_file, 'w') as f:
                 f.write(f'''@echo off
-node "{target_dir}\\bin\\openclaw.mjs" %*
+"{node_exe}" "{target_dir}\\openclaw.mjs" %*
 ''')
             
             print(f"✅ OpenClaw 已安装到: {target_dir}")

@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.4.1"
+VERSION = "3.4.2"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -107,10 +107,9 @@ class InstallWizard:
     """安装向导主类"""
     
     def __init__(self):
-        # 先显示启动提示窗口
-        self._show_loading_window()
-        
+        # 先创建主窗口（隐藏）
         self.root = tk.Tk()
+        self.root.withdraw()  # 隐藏主窗口
         
         # Windows DPI 感知（解决高分屏文字显示问题）
         try:
@@ -118,6 +117,9 @@ class InstallWizard:
             windll.shcore.SetProcessDpiAwareness(1)  # PROCESS_SYSTEM_DPI_AWARE
         except:
             pass
+        
+        # 显示启动提示窗口
+        self._show_loading_window()
         
         self.root.title("OpenClaw 一键部署工具")
         self.root.geometry("600x550")  # 增加高度
@@ -182,7 +184,7 @@ class InstallWizard:
     
     def _show_loading_window(self):
         """显示加载提示窗口"""
-        self.loading_window = tk.Tk()
+        self.loading_window = tk.Toplevel(self.root)
         self.loading_window.title("OpenClaw 安装向导")
         self.loading_window.geometry("400x150")
         self.loading_window.resizable(False, False)
@@ -218,6 +220,8 @@ class InstallWizard:
         if hasattr(self, 'loading_window'):
             self.loading_progress.stop()
             self.loading_window.destroy()
+        # 显示主窗口
+        self.root.deiconify()
         
     def center_window(self):
         """窗口居中"""

@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.2"
+VERSION = "3.3.3"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -838,9 +838,61 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         thread.start()
     
     def cleanup_environment(self):
-        """环境预清理（安装前执行）"""
+        """环境预清理（安装前执行）- 彻底清理旧版本"""
         self.root.after(0, lambda: self.update_progress(1, "清理旧版本残留..."))
         
+        # ========== 新增：彻底清理旧版本 ==========
+        try:
+            # 0. 检测 where openclaw，找出旧版本路径
+            self.root.after(0, lambda: self.update_progress(1.5, "检测旧版本 OpenClaw..."))
+            result = subprocess.run(["where", "openclaw"], shell=True, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                old_paths = result.stdout.strip().split('\n')
+                for old_path in old_paths:
+                    old_path = old_path.strip()
+                    if old_path and os.path.exists(old_path):
+                        print(f"⚠️ 发现旧版本: {old_path}")
+                        # 删除旧版本的 openclaw.cmd
+                        try:
+                            os.remove(old_path)
+                            print(f"✓ 已删除: {old_path}")
+                        except:
+                            pass
+                print("✓ 旧版本 openclaw 命令已清理")
+        except:
+            pass
+        
+        try:
+            # 0.5 删除 npm 全局目录下的 openclaw 文件夹
+            self.root.after(0, lambda: self.update_progress(1.8, "清理 npm 全局目录..."))
+            npm_global_openclaw = os.path.expandvars(r"%APPDATA%\npm\node_modules\openclaw")
+            if os.path.exists(npm_global_openclaw):
+                import shutil
+                shutil.rmtree(npm_global_openclaw, ignore_errors=True)
+                print(f"✓ 已删除 npm 全局 openclaw: {npm_global_openclaw}")
+        except:
+            pass
+        
+        try:
+            # 0.6 检查并清理 PATH 中的残留
+            self.root.after(0, lambda: self.update_progress(1.9, "检查 PATH 环境变量..."))
+            # 获取用户 PATH
+            import winreg
+            try:
+                key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                                      r'Environment', 0, winreg.KEY_READ)
+                user_path, _ = winreg.QueryValueEx(key, 'Path')
+                winreg.CloseKey(key)
+                
+                # 检查是否有 %APPDATA%\npm 残留
+                if '%APPDATA%\\npm' in user_path or r'AppData\Roaming\npm' in user_path:
+                    print("⚠️ PATH 中有 npm 全局目录，保留（正常情况）")
+            except:
+                pass
+        except:
+            pass
+        
+        # ========== 原有清理逻辑 ==========
         try:
             # 1. 杀掉残留 PM2 进程
             self.root.after(0, lambda: self.update_progress(2, "清理 PM2 进程..."))

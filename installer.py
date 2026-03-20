@@ -1165,8 +1165,9 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def _get_bundle_path(self, component):
         """获取预打包组件路径"""
+        # PyInstaller 打包后，文件解压到临时目录 _MEIPASS
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
         

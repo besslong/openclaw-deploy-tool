@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.7"
+VERSION = "3.3.8"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1423,8 +1423,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             
             # 查找 openclaw 命令路径
             openclaw_paths = [
+                os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),  # 优先这个！
                 r"C:\Program Files\nodejs\openclaw.cmd",
-                os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
                 "openclaw"
             ]
             

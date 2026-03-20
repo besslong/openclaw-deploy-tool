@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.4"
+VERSION = "3.3.5"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1259,14 +1259,13 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
     
     def configure_api_key(self):
-        """配置 API Key 和模型（动态获取模型）"""
-        provider_id = self.provider.get()  # 获取 provider_id（如 qianfan, qwen）
+        """配置 API Key 和模型（彻底修复版）"""
+        provider_id = self.provider.get()
         api_key = self.api_key.get()
         
         if not provider_id or not api_key:
             return
         
-        # 从 PROVIDER_INFO 获取配置
         provider_config = PROVIDER_INFO.get(provider_id, {})
         if not provider_config:
             print(f"未知服务商: {provider_id}")
@@ -1274,10 +1273,10 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         env_key = provider_config.get("env_key", f"{provider_id.upper()}_API_KEY")
         
-        # 查找 openclaw 命令路径
+        # 查找 openclaw 命令
         openclaw_paths = [
-            r"C:\Program Files\nodejs\openclaw.cmd",
             os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
+            r"C:\Program Files\nodejs\openclaw.cmd",
             "openclaw"
         ]
         
@@ -1295,155 +1294,122 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             print("未找到 openclaw 命令，跳过配置")
             return
         
-        # 动态获取可用模型
-        primary_model = None
-        try:
-            self.root.after(0, lambda: self.update_progress(71, "获取可用模型列表..."))
-            result = subprocess.run(
-                [openclaw_cmd, "models", "list", "--all", "--json"],
-                capture_output=True, text=True, shell=True, timeout=60
-            )
+        import time
+        
+        # 步骤1: 先写入 API Key
+        self.root.after(0, lambda: self.update_progress(71, "写入 API Key..."))
+        
+        config_path = os.path.expanduser("~/.openclaw/openclaw.json")
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        
+        config = {}
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            except:
+                pass
+        
+        if "env" not in config:
+            config["env"] = {}
+        config["env"][env_key] = api_key
+        
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        print(f"✓ API Key 已写入配置文件")
+        
+        # 步骤2: 等待配置生效
+        self.root.after(0, lambda: self.update_progress(72, "等待配置生效..."))
+        time.sleep(3)
+        
+        # 步骤3: 获取模型列表（重试3次）
+        models_list = None
+        for retry in range(3):
+            self.root.after(0, lambda r=retry: self.update_progress(73 + r, f"获取模型列表... (尝试 {r+1}/3)"))
             
-            if result.returncode == 0 and result.stdout:
-                models_data = json.loads(result.stdout)
-                print(f"获取到 {len(models_data)} 个模型")
+            try:
+                result = subprocess.run(
+                    [openclaw_cmd, "models", "list", "--all", "--json"],
+                    capture_output=True, text=True, shell=True, timeout=60
+                )
                 
-                # 筛选可用聊天模型
-                chat_models = []
-                for model in models_data:
-                    model_id = model.get("id", "")
-                    tags = model.get("tags", [])
-                    context_window = model.get("contextWindow", 0)
-                    
-                    # 排除 reasoning 模型（不能聊天）
-                    if "reasoning" in tags:
-                        continue
-                    
-                    # 只选当前服务商的模型
-                    if not model_id.startswith(f"{provider_id}/"):
-                        continue
-                    
-                    # 计算优先级分数
-                    score = 0
-                    model_name = model_id.lower()
-                    
-                    # 优先选带 plus/chat/turbo 的
-                    if "plus" in model_name:
-                        score += 100
-                    if "chat" in model_name:
-                        score += 80
-                    if "turbo" in model_name:
-                        score += 60
-                    
-                    # 上下文越大越好
-                    score += min(context_window / 1000, 50)
-                    
-                    chat_models.append((model_id, score, context_window))
-                
-                # 按分数排序
-                chat_models.sort(key=lambda x: x[1], reverse=True)
-                
-                if chat_models:
-                    primary_model = chat_models[0][0]
-                    print(f"✓ 动态选择模型: {primary_model} (分数: {chat_models[0][1]:.0f})")
+                if result.returncode == 0 and result.stdout:
+                    models_list = json.loads(result.stdout)
+                    print(f"✓ 获取到 {len(models_list)} 个模型")
+                    break
                 else:
-                    print("未找到符合条件的聊天模型，使用备用模型")
-            else:
-                print(f"获取模型列表失败: {result.stderr}")
-        except Exception as e:
-            print(f"动态获取模型失败: {e}")
+                    print(f"尝试 {retry+1} 失败")
+            except Exception as e:
+                print(f"尝试 {retry+1} 异常: {e}")
+            
+            if retry < 2:
+                time.sleep(5)
         
-        # 使用备用模型
-        if not primary_model:
-            primary_model = FALLBACK_MODELS.get(provider_id, f"{provider_id}/default")
-            print(f"✓ 使用备用模型: {primary_model}")
+        # 步骤4: 过滤白名单
+        models_whitelist = {}
+        primary_model = None
         
-        try:
-            # 1. 写入配置文件
-            config_path = os.path.expanduser("~/.openclaw/openclaw.json")
-            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+        # 定义过滤规则
+        INCLUDE_KEYWORDS = ["glm-5", "deepseek", "kimi", "minimax", "qwen", "ernie-4", "ernie-3.5", "gpt-4", "claude"]
+        EXCLUDE_KEYWORDS = ["speed", "lite", "tiny", "free", "trial"]
+        
+        if models_list:
+            for model in models_list:
+                model_id = model.get("id", "")
+                model_name = model_id.lower()
+                
+                # 检查是否在排除列表
+                exclude = False
+                for kw in EXCLUDE_KEYWORDS:
+                    if kw in model_name:
+                        exclude = True
+                        break
+                
+                if exclude:
+                    continue
+                
+                # 检查是否在包含列表
+                include = False
+                for kw in INCLUDE_KEYWORDS:
+                    if kw in model_name:
+                        include = True
+                        break
+                
+                if include:
+                    short_name = model_id.split("/")[-1] if "/" in model_id else model_id
+                    models_whitelist[model_id] = {"alias": short_name}
+                    
+                    if primary_model is None:
+                        primary_model = model_id
             
-            config = {}
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f:
-                        config = json.load(f)
-                except:
-                    pass
+            print(f"✓ 过滤后白名单：共 {len(models_whitelist)} 个模型")
+        
+        # 步骤5: 失败时用备用列表
+        if not models_whitelist:
+            print("动态获取失败，使用备用列表")
+            FALLBACK_LIST = ["glm-5", "deepseek-chat", "kimi-k2.5", "minimax-m2.5"]
             
-            if "env" not in config:
-                config["env"] = {}
-            config["env"][env_key] = api_key
+            for model_id in FALLBACK_LIST:
+                models_whitelist[model_id] = {"alias": model_id}
             
-            if "agents" not in config:
-                config["agents"] = {}
-            if "defaults" not in config["agents"]:
-                config["agents"]["defaults"] = {}
-            if "model" not in config["agents"]["defaults"]:
-                config["agents"]["defaults"]["model"] = {}
-            config["agents"]["defaults"]["model"]["primary"] = primary_model
-            
-            # 设置模型白名单（用户只能看到这些模型）
-            models_whitelist = {}
-            
-            # 1. 确保 primary_model 在第一位（必须）
-            if primary_model:
-                short_name = primary_model.split("/")[-1]
-                models_whitelist[primary_model] = {"alias": short_name}
-                print(f"✓ 默认模型（白名单第 1 个）: {primary_model}")
-            
-            # 2. 补充其他推荐模型
-            if chat_models:
-                # 动态获取成功，用动态结果
-                for model_id, score, _ in chat_models[:5]:
-                    if model_id not in models_whitelist:
-                        short_name = model_id.split("/")[-1]
-                        models_whitelist[model_id] = {"alias": short_name}
-                print(f"✓ 模型白名单（动态获取）：共 {len(models_whitelist)} 个模型")
-            else:
-                # 动态获取失败，用预设列表
-                provider_models = PROVIDER_MODELS.get(provider_id, [])
-                for model_id in provider_models:
-                    if model_id not in models_whitelist:
-                        short_name = model_id.split("/")[-1]
-                        models_whitelist[model_id] = {"alias": short_name}
-                print(f"✓ 模型白名单（预设列表）：共 {len(models_whitelist)} 个模型")
-            
-            print(f"  列表：{list(models_whitelist.keys())}")
-            
-            # 3. 设置到配置中（如果白名单不为空）
-            if models_whitelist:
-                config["agents"]["defaults"]["models"] = models_whitelist
-            
+            primary_model = FALLBACK_LIST[0]
+        
+        # 步骤6: 设置白名单和默认模型
+        self.root.after(0, lambda: self.update_progress(76, "设置模型白名单..."))
+        
+        config["agents"] = config.get("agents", {})
+        config["agents"]["defaults"] = config["agents"].get("defaults", {})
+        config["agents"]["defaults"]["model"] = config["agents"]["defaults"].get("model", {})
+        config["agents"]["defaults"]["model"]["primary"] = primary_model
+        config["agents"]["defaults"]["models"] = models_whitelist
+        
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        print(f"✓ 默认模型：{primary_model}")
+        print(f"✓ 白名单已设置：{len(models_whitelist)} 个模型")
 
-            
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2, ensure_ascii=False)
-            
-            print(f"✓ API Key 配置成功: {env_key}")
-            print(f"✓ 默认模型: {primary_model}")
-            
-            # 2. 通过命令行设置
-            subprocess.run(
-                [openclaw_cmd, "config", "set", "agents.defaults.model.primary", primary_model],
-                shell=True, capture_output=True, text=True, timeout=30
-            )
-            
-        except Exception as e:
-            print(f"配置警告: {e}")
-            
-            # 3. 运行 doctor --fix（可选，清理残留问题）
-            self.root.after(0, lambda: self.update_progress(72, "检查配置..."))
-            result = subprocess.run(
-                [openclaw_cmd, "doctor", "--fix"],
-                shell=True, capture_output=True, text=True, timeout=60
-            )
-            if result.returncode == 0:
-                print("✓ 配置检查通过")
-            
-        except Exception as e:
-            print(f"配置警告: {e}")
-    
     def install_service(self):
         """安装系统服务"""
         try:

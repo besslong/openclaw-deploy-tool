@@ -657,6 +657,10 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.access_url = ttk.Label(info_frame, text="http://127.0.0.1:18789/#token=...", font=(FONT_FAMILY, 12, 'bold'), foreground='blue')
         self.access_url.pack(anchor='w', pady=5)
         
+        # 复制按钮
+        copy_btn = ttk.Button(info_frame, text="📋 复制链接", command=self.copy_access_url)
+        copy_btn.pack(anchor='w', pady=5)
+        
         ttk.Label(info_frame, text="", font=(FONT_FAMILY, 8)).pack()  # 空行
         
         # 重要提示
@@ -675,6 +679,16 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         ttk.Button(frame, text="完成", command=self.quit).pack(pady=20)
         
         return frame
+    
+    def copy_access_url(self):
+        """复制访问链接到剪贴板"""
+        if self.finish_token:
+            url = f"http://127.0.0.1:18789/#token={self.finish_token}"
+            self.root.clipboard_clear()
+            self.root.clipboard_append(url)
+            messagebox.showinfo("提示", "链接已复制到剪贴板！")
+        else:
+            messagebox.showwarning("提示", "Token 未获取，请稍后再试")
     
     def create_error_page(self):
         """创建错误页面"""
@@ -1599,15 +1613,54 @@ node "{target_dir}\\bin\\openclaw.mjs" %*
             # 更新完成页面的 token
             self.finish_token = token
             if token:
-                self.access_url.config(text=f"http://127.0.0.1:18789/#token={token[:8]}...")
+                full_url = f"http://127.0.0.1:18789/#token={token}"
+                self.access_url.config(text=full_url)
+                
+                # 创建桌面快捷方式
+                self._create_desktop_shortcut(token)
                 
                 # 自动打开浏览器带 token
-                webbrowser.open(f"http://127.0.0.1:18789/#token={token}")
+                webbrowser.open(full_url)
                 print(f"✓ 浏览器已打开，Token: {token[:8]}...")
         except Exception as e:
             print(f"获取 token 失败: {e}")
         
         self.show_page(7)  # 完成页面
+    
+    def _create_desktop_shortcut(self, token):
+        """创建桌面快捷方式"""
+        try:
+            import os
+            
+            # 获取桌面路径
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            if not os.path.exists(desktop):
+                desktop = os.path.join(os.path.expanduser("~"), "桌面")
+            
+            if not os.path.exists(desktop):
+                print("⚠️ 找不到桌面目录")
+                return
+            
+            # 快捷方式路径
+            shortcut_path = os.path.join(desktop, "OpenClaw.url")
+            
+            # 访问地址
+            url = f"http://127.0.0.1:18789/#token={token}"
+            
+            # 创建 .url 文件
+            content = f"""[InternetShortcut]
+URL={url}
+IconFile=C:\\Program Files\\nodejs\\node.exe
+IconIndex=0
+"""
+            
+            with open(shortcut_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            print(f"✅ 桌面快捷方式已创建: {shortcut_path}")
+            
+        except Exception as e:
+            print(f"⚠️ 创建快捷方式失败: {e}")
     
     def show_error(self, msg):
         """显示错误页面"""

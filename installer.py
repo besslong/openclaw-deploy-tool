@@ -1043,8 +1043,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         # 下载安装包
         self.root.after(0, lambda: self.update_progress(31, "正在下载 Git 安装包..."))
         git_mirrors = [
-            "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",
-            "https://mirrors.huaweicloud.com/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe"
+            "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",  # 淘宝
+            "https://mirrors.cloud.tencent.com/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",  # 腾讯云
         ]
         
         installer_path = os.path.join(os.environ.get("TEMP", "."), "git_installer.exe")

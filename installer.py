@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.3.5"
+VERSION = "3.3.6"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1319,83 +1319,23 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         print(f"✓ API Key 已写入配置文件")
         
-        # 步骤2: 等待配置生效
-        self.root.after(0, lambda: self.update_progress(72, "等待配置生效..."))
-        time.sleep(3)
+        # 直接使用备用模型列表（不动态获取，避免卡顿）
+        self.root.after(0, lambda: self.update_progress(73, "设置模型白名单..."))
         
-        # 步骤3: 获取模型列表（重试3次）
-        models_list = None
-        for retry in range(3):
-            self.root.after(0, lambda r=retry: self.update_progress(73 + r, f"获取模型列表... (尝试 {r+1}/3)"))
-            
-            try:
-                result = subprocess.run(
-                    [openclaw_cmd, "models", "list", "--all", "--json"],
-                    capture_output=True, text=True, shell=True, timeout=60
-                )
-                
-                if result.returncode == 0 and result.stdout:
-                    models_list = json.loads(result.stdout)
-                    print(f"✓ 获取到 {len(models_list)} 个模型")
-                    break
-                else:
-                    print(f"尝试 {retry+1} 失败")
-            except Exception as e:
-                print(f"尝试 {retry+1} 异常: {e}")
-            
-            if retry < 2:
-                time.sleep(5)
+        # 备用模型列表
+        FALLBACK_LIST = ["glm-5", "deepseek-chat", "kimi-k2.5", "minimax-m2.5", "qwen-turbo", "gpt-4o-mini", "claude-3-5-sonnet", "ernie-4.0-8k"]
         
-        # 步骤4: 过滤白名单
         models_whitelist = {}
         primary_model = None
         
-        # 定义过滤规则
-        INCLUDE_KEYWORDS = ["glm-5", "deepseek", "kimi", "minimax", "qwen", "ernie-4", "ernie-3.5", "gpt-4", "claude"]
-        EXCLUDE_KEYWORDS = ["speed", "lite", "tiny", "free", "trial"]
+        for model_id in FALLBACK_LIST:
+            models_whitelist[model_id] = {"alias": model_id}
+            if primary_model is None:
+                primary_model = model_id
         
-        if models_list:
-            for model in models_list:
-                model_id = model.get("id", "")
-                model_name = model_id.lower()
-                
-                # 检查是否在排除列表
-                exclude = False
-                for kw in EXCLUDE_KEYWORDS:
-                    if kw in model_name:
-                        exclude = True
-                        break
-                
-                if exclude:
-                    continue
-                
-                # 检查是否在包含列表
-                include = False
-                for kw in INCLUDE_KEYWORDS:
-                    if kw in model_name:
-                        include = True
-                        break
-                
-                if include:
-                    short_name = model_id.split("/")[-1] if "/" in model_id else model_id
-                    models_whitelist[model_id] = {"alias": short_name}
-                    
-                    if primary_model is None:
-                        primary_model = model_id
-            
-            print(f"✓ 过滤后白名单：共 {len(models_whitelist)} 个模型")
+        print(f"✓ 使用预设模型列表：共 {len(models_whitelist)} 个模型")
         
-        # 步骤5: 失败时用备用列表
-        if not models_whitelist:
-            print("动态获取失败，使用备用列表")
-            FALLBACK_LIST = ["glm-5", "deepseek-chat", "kimi-k2.5", "minimax-m2.5"]
-            
-            for model_id in FALLBACK_LIST:
-                models_whitelist[model_id] = {"alias": model_id}
-            
-            primary_model = FALLBACK_LIST[0]
-        
-        # 步骤6: 设置白名单和默认模型
+        # 设置白名单和默认模型
         self.root.after(0, lambda: self.update_progress(76, "设置模型白名单..."))
         
         config["agents"] = config.get("agents", {})

@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.4.0"
+VERSION = "3.4.1"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -107,6 +107,9 @@ class InstallWizard:
     """安装向导主类"""
     
     def __init__(self):
+        # 先显示启动提示窗口
+        self._show_loading_window()
+        
         self.root = tk.Tk()
         
         # Windows DPI 感知（解决高分屏文字显示问题）
@@ -119,6 +122,9 @@ class InstallWizard:
         self.root.title("OpenClaw 一键部署工具")
         self.root.geometry("600x550")  # 增加高度
         self.root.resizable(False, False)
+        
+        # 关闭加载提示
+        self._close_loading_window()
         
         # 禁用最大化按钮（Windows）
         try:
@@ -149,6 +155,9 @@ class InstallWizard:
         self.install_progress = tk.DoubleVar(value=0)
         self.install_status = tk.StringVar(value="准备安装...")
         
+        # 初始化 gateway_token
+        self.gateway_token = ""
+        
         # 安装步骤
         self.install_steps = [
             "检测系统环境",
@@ -170,6 +179,45 @@ class InstallWizard:
         
         # 显示第一页
         self.show_page(0)
+    
+    def _show_loading_window(self):
+        """显示加载提示窗口"""
+        self.loading_window = tk.Tk()
+        self.loading_window.title("OpenClaw 安装向导")
+        self.loading_window.geometry("400x150")
+        self.loading_window.resizable(False, False)
+        self.loading_window.overrideredirect(True)  # 无边框
+        
+        # 居中
+        self.loading_window.update_idletasks()
+        x = (self.loading_window.winfo_screenwidth() // 2) - 200
+        y = (self.loading_window.winfo_screenheight() // 2) - 75
+        self.loading_window.geometry(f'400x150+{x}+{y}')
+        
+        # 内容
+        frame = tk.Frame(self.loading_window, bg=COLOR_BG, relief='raised', bd=2)
+        frame.pack(fill='both', expand=True)
+        
+        tk.Label(frame, text="🦞 OpenClaw 安装向导", 
+                font=(FONT_FAMILY, 16, 'bold'), 
+                bg=COLOR_BG, fg=COLOR_PRIMARY).pack(pady=20)
+        
+        tk.Label(frame, text="正在初始化，请稍候...", 
+                font=(FONT_FAMILY, 12), 
+                bg=COLOR_BG, fg=COLOR_TEXT).pack(pady=10)
+        
+        # 进度条动画
+        self.loading_progress = ttk.Progressbar(frame, mode='indeterminate', length=300)
+        self.loading_progress.pack(pady=10)
+        self.loading_progress.start(10)
+        
+        self.loading_window.update()
+    
+    def _close_loading_window(self):
+        """关闭加载提示窗口"""
+        if hasattr(self, 'loading_window'):
+            self.loading_progress.stop()
+            self.loading_window.destroy()
         
     def center_window(self):
         """窗口居中"""
@@ -1636,10 +1684,12 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     def show_finish(self):
         """显示完成页面"""
         # 获取 token 并更新显示
+        token = ''
         try:
             # 优先使用安装时生成的 token
             if hasattr(self, 'gateway_token') and self.gateway_token:
                 token = self.gateway_token
+                print(f"✓ 从安装过程获取 token: {token[:8]}...")
             else:
                 # 从配置文件读取
                 config_path = os.path.expanduser("~/.openclaw/openclaw.json")
@@ -1647,23 +1697,29 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                         token = config.get('gateway', {}).get('auth', {}).get('token', '')
+                    print(f"✓ 从配置文件获取 token: {token[:8] if token else '空'}...")
                 else:
-                    token = ''
-            
-            # 更新完成页面的 token
-            self.finish_token = token
-            if token:
-                full_url = f"http://127.0.0.1:18789/#token={token}"
-                self.access_url.config(text=full_url)
-                
-                # 创建桌面快捷方式
-                self._create_desktop_shortcut(token)
-                
-                # 自动打开浏览器带 token
-                webbrowser.open(full_url)
-                print(f"✓ 浏览器已打开，Token: {token[:8]}...")
+                    print(f"⚠️ 配置文件不存在: {config_path}")
         except Exception as e:
             print(f"获取 token 失败: {e}")
+        
+        # 更新完成页面的 token（无论是否为空都要更新）
+        self.finish_token = token
+        
+        if token:
+            full_url = f"http://127.0.0.1:18789/#token={token}"
+            self.access_url.config(text=full_url)
+            
+            # 创建桌面快捷方式
+            self._create_desktop_shortcut(token)
+            
+            # 自动打开浏览器带 token
+            webbrowser.open(full_url)
+            print(f"✓ 浏览器已打开，Token: {token[:8]}...")
+        else:
+            # Token 为空，显示提示
+            self.access_url.config(text="Token 获取失败，请手动运行 openclaw doctor")
+            print("⚠️ Token 为空")
         
         self.show_page(7)  # 完成页面
     

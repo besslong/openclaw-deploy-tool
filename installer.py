@@ -882,21 +882,14 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         try:
             # 4. 清理 npm 缓存
-            npm_paths = [
-                r"C:\Program Files\nodejs\npm.cmd",
-                os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
-                "npm"
-            ]
-            for npm_path in npm_paths:
+            npm_path = self._find_npm_cmd()
+            if npm_path:
                 try:
-                    result = subprocess.run([npm_path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
-                    if result.returncode == 0:
-                        subprocess.run([npm_path, "cache", "clean", "--force"], 
-                                      shell=True, capture_output=True, timeout=60)
-                        print("✓ npm 缓存已清理")
-                        break
+                    subprocess.run([npm_path, "cache", "clean", "--force"], 
+                                  shell=True, capture_output=True, timeout=60)
+                    print("✓ npm 缓存已清理")
                 except:
-                    continue
+                    pass
         except:
             pass
         
@@ -1015,6 +1008,98 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self._install_nodejs_online()
         self.root.after(0, lambda: self.update_progress(25, "Node.js 安装完成 ✓"))
     
+    def _find_node_exe(self):
+        """动态查找 node.exe 的路径"""
+        # 1. 尝试从 PATH 中查找
+        try:
+            result = subprocess.run(["where", "node"], capture_output=True, text=True, shell=True, timeout=5)
+            if result.returncode == 0:
+                paths = result.stdout.strip().split('\n')
+                if paths:
+                    return paths[0].strip()
+        except:
+            pass
+        
+        # 2. 尝试常见路径
+        common_paths = [
+            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs", "node.exe"),
+            os.path.join(os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"), "nodejs", "node.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\node\node.exe"),
+            os.path.expandvars(r"%APPDATA%\npm\node.exe"),
+        ]
+        
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+        
+        # 3. 如果还是找不到，尝试遍历 Program Files 下的 nodejs 目录
+        for prog_dir in [os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", "")]:
+            if prog_dir:
+                nodejs_dir = os.path.join(prog_dir, "nodejs")
+                if os.path.exists(nodejs_dir):
+                    node_exe = os.path.join(nodejs_dir, "node.exe")
+                    if os.path.exists(node_exe):
+                        return node_exe
+        
+        return None
+    
+    def _find_npm_cmd(self):
+        """动态查找 npm.cmd 的路径"""
+        # 1. 尝试从 PATH 中查找
+        try:
+            result = subprocess.run(["where", "npm"], capture_output=True, text=True, shell=True, timeout=5)
+            if result.returncode == 0:
+                paths = result.stdout.strip().split('\n')
+                for path in paths:
+                    if path.strip().endswith('npm.cmd'):
+                        return path.strip()
+        except:
+            pass
+        
+        # 2. 根据 node.exe 的位置推断
+        node_exe = self._find_node_exe()
+        if node_exe:
+            nodejs_dir = os.path.dirname(node_exe)
+            npm_cmd = os.path.join(nodejs_dir, "npm.cmd")
+            if os.path.exists(npm_cmd):
+                return npm_cmd
+        
+        # 3. 尝试 AppData
+        npm_cmd = os.path.expandvars(r"%APPDATA%\npm\npm.cmd")
+        if os.path.exists(npm_cmd):
+            return npm_cmd
+        
+        return None
+    
+    def _find_openclaw_cmd(self):
+        """动态查找 openclaw 命令的路径"""
+        # 1. 尝试从 PATH 中查找
+        try:
+            result = subprocess.run(["where", "openclaw"], capture_output=True, text=True, shell=True, timeout=5)
+            if result.returncode == 0:
+                paths = result.stdout.strip().split('\n')
+                for path in paths:
+                    if 'openclaw' in path.lower():
+                        return path.strip()
+        except:
+            pass
+        
+        # 2. 尝试 AppData (npm 全局目录)
+        openclaw_cmd = os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd")
+        if os.path.exists(openclaw_cmd):
+            return openclaw_cmd
+        
+        # 3. 根据 node.exe 的位置推断
+        node_exe = self._find_node_exe()
+        if node_exe:
+            nodejs_dir = os.path.dirname(node_exe)
+            openclaw_cmd = os.path.join(nodejs_dir, "openclaw.cmd")
+            if os.path.exists(openclaw_cmd):
+                return openclaw_cmd
+        
+        # 4. 直接返回 "openclaw" 让系统在 PATH 中查找
+        return "openclaw"
+    
     def _install_nodejs_from_bundle(self, bundle_dir):
         """从预打包目录安装 Node.js（离线）"""
         try:
@@ -1028,8 +1113,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             
             print(f"📦 从预打包安装 Node.js: {bundle_dir}")
             
-            # 复制到 Program Files
-            target_dir = r"C:\Program Files\nodejs"
+            # 使用环境变量获取安装路径，不硬编码
+            target_dir = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs")
             
             # 如果目标存在，先删除
             if os.path.exists(target_dir):
@@ -1039,6 +1124,9 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             
             # 添加到 PATH（系统环境变量）
             self._add_to_path(target_dir)
+            
+            # 记录安装路径
+            self.nodejs_install_path = target_dir
             
             print(f"✅ Node.js 已安装到: {target_dir}")
             return True
@@ -1108,8 +1196,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             
             print(f"📦 从预打包安装 Git: {bundle_dir}")
             
-            # 复制到 Program Files
-            target_dir = r"C:\Program Files\Git"
+            # 使用环境变量获取安装路径
+            target_dir = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "Git")
             
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
@@ -1244,10 +1332,13 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             
             shutil.copytree(bundle_dir, target_dir)
             
-            # 创建命令行工具
-            # 使用 Node.js 的完整路径（因为 PATH 可能还没更新）
-            node_exe = r"C:\Program Files\nodejs\node.exe"
+            # 动态查找 node.exe 的路径
+            node_exe = self._find_node_exe()
+            if not node_exe:
+                print("❌ 找不到 node.exe，请确保 Node.js 已正确安装")
+                return False
             
+            # 创建命令行工具
             npm_dir = os.path.expandvars(r"%APPDATA%\npm")
             cmd_file = os.path.join(npm_dir, 'openclaw.cmd')
             
@@ -1257,6 +1348,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
 ''')
             
             print(f"✅ OpenClaw 已安装到: {target_dir}")
+            print(f"✅ 使用 Node.js: {node_exe}")
             return True
             
         except Exception as e:
@@ -1265,22 +1357,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def _install_openclaw_online(self):
         """在线下载安装 OpenClaw"""
-        # 查找 npm
-        npm_paths = [
-            r"C:\Program Files\nodejs\npm.cmd",
-            os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
-            "npm"
-        ]
-        
-        npm_cmd = None
-        for path in npm_paths:
-            try:
-                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
-                if result.returncode == 0:
-                    npm_cmd = path
-                    break
-            except:
-                continue
+        # 动态查找 npm
+        npm_cmd = self._find_npm_cmd()
         
         if not npm_cmd:
             raise Exception("找不到 npm，请确保 Node.js 已正确安装")
@@ -1317,22 +1395,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         env_key = provider_config.get("env_key", f"{provider_id.upper()}_API_KEY")
         
-        # 查找 openclaw 命令路径
-        openclaw_paths = [
-            r"C:\Program Files\nodejs\openclaw.cmd",
-            os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
-            "openclaw"
-        ]
-        
-        openclaw_cmd = None
-        for path in openclaw_paths:
-            try:
-                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
-                if result.returncode == 0:
-                    openclaw_cmd = path
-                    break
-            except:
-                continue
+        # 动态查找 openclaw 命令路径
+        openclaw_cmd = self._find_openclaw_cmd()
         
         if not openclaw_cmd:
             print("未找到 openclaw 命令，跳过配置")
@@ -1484,22 +1548,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             # 1. 先配置 gateway.mode（必须先配置，否则 gateway 无法启动）
             self.root.after(0, lambda: self.update_progress(91, "配置 Gateway 模式..."))
             
-            # 查找 openclaw 命令路径
-            openclaw_paths = [
-                r"C:\Program Files\nodejs\openclaw.cmd",
-                os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
-                "openclaw"
-            ]
-            
-            openclaw_cmd = None
-            for path in openclaw_paths:
-                try:
-                    result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
-                    if result.returncode == 0:
-                        openclaw_cmd = path
-                        break
-                except:
-                    continue
+            # 动态查找 openclaw 命令路径
+            openclaw_cmd = self._find_openclaw_cmd()
             
             if not openclaw_cmd:
                 self.root.after(0, lambda: self.update_progress(92, "⚠️ 未找到 openclaw 命令，跳过服务配置"))
@@ -1525,21 +1575,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             # 2. 安装 PM2
             self.root.after(0, lambda: self.update_progress(93, "安装 PM2 进程管理器..."))
             
-            npm_paths = [
-                r"C:\Program Files\nodejs\npm.cmd",
-                os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
-                "npm"
-            ]
-            
-            npm_cmd = None
-            for path in npm_paths:
-                try:
-                    result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
-                    if result.returncode == 0:
-                        npm_cmd = path
-                        break
-                except:
-                    continue
+            npm_cmd = self._find_npm_cmd()
             
             if npm_cmd:
                 subprocess.run([npm_cmd, "install", "-g", "pm2", "--registry", "https://registry.npmmirror.com"], 

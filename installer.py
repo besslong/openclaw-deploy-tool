@@ -1557,10 +1557,12 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     def show_finish(self):
         """显示完成页面"""
         # 获取 token 并更新显示
+        token = ''
         try:
             # 优先使用安装时生成的 token
             if hasattr(self, 'gateway_token') and self.gateway_token:
                 token = self.gateway_token
+                print(f"✓ 从安装过程获取 token: {token[:8]}...")
             else:
                 # 从配置文件读取
                 config_path = os.path.expanduser("~/.openclaw/openclaw.json")
@@ -1568,23 +1570,29 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                     with open(config_path, 'r', encoding='utf-8') as f:
                         config = json.load(f)
                         token = config.get('gateway', {}).get('auth', {}).get('token', '')
+                    print(f"✓ 从配置文件获取 token: {token[:8] if token else '空'}...")
                 else:
-                    token = ''
-            
-            # 更新完成页面的 token
-            self.finish_token = token
-            if token:
-                full_url = f"http://127.0.0.1:18789/#token={token}"
-                self.access_url.config(text=full_url)
-                
-                # 创建桌面快捷方式
-                self._create_desktop_shortcut(token)
-                
-                # 自动打开浏览器带 token
-                webbrowser.open(full_url)
-                print(f"✓ 浏览器已打开，Token: {token[:8]}...")
+                    print(f"⚠️ 配置文件不存在：{config_path}")
         except Exception as e:
-            print(f"获取 token 失败: {e}")
+            print(f"获取 token 失败：{e}")
+        
+        # 更新完成页面的 token（无论是否为空都要更新）
+        self.finish_token = token
+        
+        if token:
+            full_url = f"http://127.0.0.1:18789/#token={token}"
+            self.access_url.config(text=full_url)
+            
+            # 创建桌面快捷方式
+            self._create_desktop_shortcut(token)
+            
+            # 自动打开浏览器带 token
+            webbrowser.open(full_url)
+            print(f"✓ 浏览器已打开，Token: {token[:8]}...")
+        else:
+            # Token 为空，显示提示
+            self.access_url.config(text="Token 获取失败，请手动运行 openclaw doctor")
+            print("⚠️ Token 为空")
         
         self.show_page(7)  # 完成页面
     

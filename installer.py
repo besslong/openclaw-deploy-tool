@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.5.2"
+VERSION = "3.5.3"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1063,14 +1063,60 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def _get_bundle_path(self, component):
         """获取离线安装包路径（PyInstaller --onefile 模式）"""
-        if getattr(sys, 'frozen', False):
-            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
-        else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"\n🔍 正在检测离线包: {component}")
         
+        # 检测是否在 PyInstaller 打包环境中
+        is_frozen = getattr(sys, 'frozen', False)
+        print(f"   is_frozen: {is_frozen}")
+        
+        if is_frozen:
+            # PyInstaller --onefile 模式：文件解压到 _MEIPASS 临时目录
+            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+            print(f"   _MEIPASS: {base_dir}")
+            print(f"   sys.executable: {sys.executable}")
+        else:
+            # 开发模式：使用当前脚本目录
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            print(f"   开发模式，base_dir: {base_dir}")
+        
+        # 检测 bundle 路径
         bundle_path = os.path.join(base_dir, 'bundle', component)
+        print(f"   检测路径: {bundle_path}")
+        print(f"   路径存在: {os.path.exists(bundle_path)}")
+        
+        # 列出 base_dir 下的内容
+        if os.path.exists(base_dir):
+            try:
+                items = os.listdir(base_dir)
+                print(f"   {base_dir} 内容: {items[:10]}...")  # 只显示前10个
+            except Exception as e:
+                print(f"   无法列出目录: {e}")
+        
+        # 列出 bundle 目录下的内容
+        bundle_dir = os.path.join(base_dir, 'bundle')
+        if os.path.exists(bundle_dir):
+            try:
+                items = os.listdir(bundle_dir)
+                print(f"   bundle 目录内容: {items}")
+            except Exception as e:
+                print(f"   无法列出 bundle 目录: {e}")
+        else:
+            print(f"   bundle 目录不存在: {bundle_dir}")
+        
         if os.path.exists(bundle_path):
+            # 计算目录大小
+            try:
+                total_size = 0
+                for dirpath, dirnames, filenames in os.walk(bundle_path):
+                    for f in filenames:
+                        fp = os.path.join(dirpath, f)
+                        total_size += os.path.getsize(fp)
+                print(f"   ✅ 找到离线包，大小: {total_size / 1024 / 1024:.1f} MB")
+            except:
+                pass
             return bundle_path
+        
+        print(f"   ❌ 未找到离线包")
         return None
     
     def install_nodejs(self):

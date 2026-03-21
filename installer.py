@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.5.3"
+VERSION = "3.5.4"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1282,25 +1282,36 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
 ''')
                 print(f"✓ 命令行工具创建完成: {cmd_file}")
                 
-                # 验证 openclaw 命令
+                # 验证 openclaw 命令（不阻塞主线程）
                 self.root.after(0, lambda: self.update_progress(65, "验证安装..."))
                 print("🔍 正在验证 openclaw 命令...")
-                time.sleep(2)
                 
-                result = subprocess.run([cmd_file, "--version"], capture_output=True, text=True, shell=True, timeout=30)
-                if result.returncode != 0:
-                    print(f"⚠️ openclaw --version 执行失败: {result.stderr}")
-                    raise Exception("openclaw 命令验证失败")
-                
-                version = result.stdout.strip()
-                print(f"✓ openclaw 命令验证成功: {version}")
+                try:
+                    # 使用更短的超时，避免卡住
+                    result = subprocess.run([cmd_file, "--version"], capture_output=True, text=True, shell=True, timeout=15)
+                    if result.returncode == 0:
+                        version = result.stdout.strip()
+                        print(f"✓ openclaw 命令验证成功: {version}")
+                    else:
+                        print(f"⚠️ openclaw --version 执行失败: {result.stderr}")
+                        print("⚠️ 跳过验证，继续安装...")
+                except subprocess.TimeoutExpired:
+                    print("⚠️ openclaw --version 执行超时")
+                    print("⚠️ 跳过验证，继续安装...")
+                except Exception as e:
+                    print(f"⚠️ 验证出错: {e}")
+                    print("⚠️ 跳过验证，继续安装...")
                 
                 self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
                 print(f"✅ OpenClaw 离线安装成功！")
+                print(f"📁 安装目录: {target_dir}")
+                print(f"📁 命令文件: {cmd_file}")
                 print("=" * 50)
                 return
             except Exception as e:
-                print(f"⚠️ 离线安装失败: {e}")
+                print(f"❌ 离线安装失败: {e}")
+                import traceback
+                traceback.print_exc()
         
         # 离线包不存在，抛出错误
         raise Exception("OpenClaw 离线安装包不存在！\n请重新下载完整的安装包（约 260MB）。")

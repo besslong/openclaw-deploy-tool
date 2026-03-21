@@ -75,9 +75,14 @@ jobs:
       run: pip install pyinstaller requests
       shell: bash
 
-    - name: Build with PyInstaller (include bundle)
+    - name: Build OpenClaw-Installer (include bundle)
       run: |
         pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Installer" --add-data "bundle;bundle" installer.py
+      shell: bash
+
+    - name: Build OpenClaw-Doctor
+      run: |
+        pyinstaller --onefile --windowed --icon=openclaw_logo.ico --name "OpenClaw-Doctor" openclaw_doctor.py
       shell: bash
 
     - name: Check installer size
@@ -86,11 +91,18 @@ jobs:
         echo "📦 最终安装包大小："
         ls -lh dist/
 
-    - name: Upload artifact
+    - name: Upload OpenClaw-Installer artifact
       uses: actions/upload-artifact@v4
       with:
         name: OpenClaw-Installer
         path: dist/OpenClaw-Installer.exe
+        retention-days: 30
+
+    - name: Upload OpenClaw-Doctor artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: OpenClaw-Doctor
+        path: dist/OpenClaw-Doctor.exe
         retention-days: 30
 
   release:
@@ -101,13 +113,22 @@ jobs:
       contents: write
 
     steps:
-    - name: Download artifact
+    - name: Download OpenClaw-Installer artifact
       uses: actions/download-artifact@v4
       with:
-        path: artifacts
+        name: OpenClaw-Installer
+        path: artifacts/installer
+
+    - name: Download OpenClaw-Doctor artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: OpenClaw-Doctor
+        path: artifacts/doctor
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        files: artifacts/OpenClaw-Installer/OpenClaw-Installer.exe
+        files: |
+          artifacts/installer/OpenClaw-Installer.exe
+          artifacts/doctor/OpenClaw-Doctor.exe
         generate_release_notes: true

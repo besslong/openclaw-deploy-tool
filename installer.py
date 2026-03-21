@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.4.1"
+VERSION = "3.4.6"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1274,14 +1274,36 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                     shutil.rmtree(target_dir)
                 shutil.copytree(bundle_openclaw, target_dir)
                 
-                # 创建命令行工具
+                # 创建命令行工具（指向正确的入口文件）
                 npm_dir = os.path.expandvars(r"%APPDATA%\npm")
                 cmd_file = os.path.join(npm_dir, 'openclaw.cmd')
                 node_exe = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs", "node.exe")
+                
+                # 检测正确的入口文件
+                entry_file = None
+                for entry in ['dist/entry.mjs', 'dist/index.js', 'openclaw.mjs', 'index.js']:
+                    entry_path = os.path.join(target_dir, entry.replace('/', '\\'))
+                    if os.path.exists(entry_path):
+                        entry_file = entry_path
+                        print(f"✓ 找到入口文件: {entry_file}")
+                        break
+                
+                if not entry_file:
+                    raise Exception("找不到 OpenClaw 入口文件，请检查安装包")
+                
                 with open(cmd_file, 'w') as f:
                     f.write(f'''@echo off
-"{node_exe}" "{target_dir}\\openclaw.mjs" %*
+"{node_exe}" "{entry_file}" %*
 ''')
+                
+                # 验证 openclaw 命令是否可用
+                import time
+                time.sleep(1)
+                result = subprocess.run([cmd_file, "--version"], capture_output=True, text=True, shell=True, timeout=10)
+                if result.returncode != 0:
+                    print(f"⚠️ openclaw --version 执行失败: {result.stderr}")
+                    raise Exception("openclaw 命令验证失败")
+                print(f"✓ openclaw 命令验证成功: {result.stdout.strip()}")
                 self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓ (离线)"))
                 print(f"✓ OpenClaw 离线安装成功: {target_dir}")
                 return
@@ -1459,8 +1481,15 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                     continue
             
             if not openclaw_cmd:
-                self.root.after(0, lambda: self.update_progress(92, "⚠️ 未找到 openclaw 命令，跳过服务配置"))
-                return
+                error_msg = """OpenClaw 命令不可用！
+
+请尝试以下步骤：
+1. 打开新的 CMD 窗口（以管理员身份运行）
+2. 执行: npm install -g openclaw --force --registry https://registry.npmmirror.com
+3. 验证: openclaw --version
+4. 重新运行安装程序"""
+                self.root.after(0, lambda: self.show_error(error_msg))
+                raise Exception("openclaw 命令不可用，请手动安装")
             
             # 配置 gateway.mode
             subprocess.run([openclaw_cmd, "config", "set", "gateway.mode", "local"], shell=True, capture_output=True, timeout=30)
@@ -1472,8 +1501,23 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             # 生成随机 token
             import secrets
             token = secrets.token_hex(16)
-            subprocess.run([openclaw_cmd, "config", "set", "gateway.auth.token", token], 
-                          shell=True, capture_output=True, timeout=30)
+            result = subprocess.run([openclaw_cmd, "config", "set", "gateway.auth.token", token], 
+                          shell=True, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                print(f"⚠️ token 设置失败: {result.stderr}")
+            else:
+                print(f"✓ token 设置成功: {token[:8]}...")
+            
+            # 验证 token 是否写入成功
+            import time
+            time.sleep(1)
+            verify_result = subprocess.run([openclaw_cmd, "config", "get", "gateway.auth.token"],
+                                          shell=True, capture_output=True, text=True, timeout=10)
+            if token in verify_result.stdout:
+                print(f"✓ token 验证成功")
+            else:
+                print(f"⚠️ token 验证失败，配置文件可能未正确写入")
+            
             self.root.after(0, lambda: self.update_progress(92, "访问令牌生成完成 ✓"))
             
             # 保存 token 供后面使用

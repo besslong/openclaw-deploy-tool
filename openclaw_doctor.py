@@ -263,21 +263,42 @@ class OpenClawDoctor:
     
     def start_service(self):
         """尝试启动服务"""
+        import time
+        
         try:
-            # 检查 PM2 是否有 openclaw 进程
-            result = subprocess.run(["pm2", "list"], 
-                                   shell=True, capture_output=True, text=True, timeout=10)
-            if "openclaw" in result.stdout:
-                # 有 PM2 进程，尝试恢复
-                subprocess.run(["pm2", "resurrect"], 
-                              shell=True, capture_output=True, timeout=30)
-                import time
-                time.sleep(3)
-                return self.check_service_running()
+            # 方法1: PM2 resurrect（恢复保存的进程）
+            print("尝试 PM2 resurrect...")
+            result = subprocess.run(["pm2", "resurrect"], 
+                                   shell=True, capture_output=True, text=True, timeout=30)
+            time.sleep(3)
+            if self.check_service_running():
+                print("✓ PM2 resurrect 成功")
+                return True
             
-            # 没有 PM2，尝试直接启动
+            # 方法2: PM2 start（使用绝对路径）
+            print("尝试 PM2 start...")
+            openclaw_js = os.path.join(os.environ.get('APPDATA', ''), 
+                                       'npm', 'node_modules', 'openclaw', 'dist', 'index.js')
+            openclaw_cwd = os.path.expanduser('~/.openclaw')
+            
+            if os.path.exists(openclaw_js):
+                result = subprocess.run([
+                    "pm2", "start", openclaw_js,
+                    "--cwd", openclaw_cwd,
+                    "--name", "openclaw",
+                    "--", "gateway"
+                ], shell=True, capture_output=True, text=True, timeout=60)
+                print(f"PM2 start 输出: {result.stdout}")
+                if result.stderr:
+                    print(f"PM2 start 错误: {result.stderr}")
+                time.sleep(5)
+                if self.check_service_running():
+                    print("✓ PM2 start 成功")
+                    return True
+            
+            # 方法3: 直接启动 openclaw gateway
+            print("尝试直接启动...")
             if platform.system() == "Windows":
-                # Windows: 找到 openclaw 路径
                 openclaw_paths = [
                     os.path.expandvars(r"%APPDATA%\npm\openclaw.cmd"),
                     r"C:\Program Files\nodejs\openclaw.cmd",
@@ -285,16 +306,25 @@ class OpenClawDoctor:
                 
                 for openclaw_path in openclaw_paths:
                     if os.path.exists(openclaw_path):
-                        # 后台启动
-                        subprocess.Popen([openclaw_path, "gateway"],
-                                       shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        import time
+                        # 使用 subprocess.Popen 后台启动
+                        subprocess.Popen(
+                            [openclaw_path, "gateway"],
+                            shell=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            cwd=openclaw_cwd
+                        )
                         time.sleep(5)
-                        return self.check_service_running()
+                        if self.check_service_running():
+                            print("✓ 直接启动成功")
+                            return True
+            
+            print("❌ 所有启动方式都失败")
+            return False
+            
         except Exception as e:
             print(f"启动服务失败: {e}")
-            
-        return False
+            return False
     
     def get_token(self):
         """从配置文件获取 token"""

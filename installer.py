@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.4.6"
+VERSION = "3.4.7"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1624,15 +1624,17 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         self.finish_token = token
         
         if token:
-            full_url = f"http://127.0.0.1:18789/#token={token}"
+            # 正确的访问地址是 WebChat 路径
+            full_url = f"http://127.0.0.1:{DEFAULT_PORT}/__openclaw__/webchat/"
             self.access_url.config(text=full_url)
             
             # 创建桌面快捷方式
-            self._create_desktop_shortcut(token)
+            self._create_desktop_shortcut()
             
-            # 自动打开浏览器带 token
+            # 自动打开浏览器
             webbrowser.open(full_url)
-            print(f"✓ 浏览器已打开，Token: {token[:8]}...")
+            print(f"✓ 浏览器已打开: {full_url}")
+            print(f"✓ Token: {token[:8]}...（已保存在配置文件中）")
         else:
             # Token 为空，显示提示
             self.access_url.config(text="Token 获取失败，请手动运行 openclaw doctor")
@@ -1640,7 +1642,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         
         self.show_page(7)  # 完成页面
     
-    def _create_desktop_shortcut(self, token):
+    def _create_desktop_shortcut(self):
         """创建桌面快捷方式"""
         try:
             # 获取桌面路径
@@ -1655,8 +1657,8 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             # 快捷方式路径
             shortcut_path = os.path.join(desktop, "OpenClaw.url")
             
-            # 访问地址
-            url = f"http://127.0.0.1:18789/#token={token}"
+            # 访问地址（正确的 WebChat 路径）
+            url = f"http://127.0.0.1:{DEFAULT_PORT}/__openclaw__/webchat/"
             
             # 创建 .url 文件
             content = f"""[InternetShortcut]

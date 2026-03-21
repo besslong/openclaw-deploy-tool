@@ -206,7 +206,7 @@ class OpenClawDoctor:
             self.token.set(token)
             self.status.set("✅ 服务运行中")
             self.status_label.config(foreground=COLOR_SUCCESS)
-            self.access_url.set(f"http://127.0.0.1:{DEFAULT_PORT}/#token={token}")
+            self.access_url.set(f"http://127.0.0.1:{DEFAULT_PORT}/__openclaw__/webchat/")
         else:
             # 尝试生成 token
             if self.generate_token():
@@ -368,7 +368,7 @@ class OpenClawDoctor:
             
             # 更新界面
             self.token.set(token)
-            self.access_url.set(f"http://127.0.0.1:{DEFAULT_PORT}/#token={token}")
+            self.access_url.set(f"http://127.0.0.1:{DEFAULT_PORT}/__openclaw__/webchat/")
             
             return True
         except Exception as e:

@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.5.1"
+VERSION = "3.5.2"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -1174,19 +1174,46 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             pass
         
         # ===== 离线安装 =====
+        print("=" * 50)
+        print("📦 开始安装 OpenClaw...")
+        print("=" * 50)
+        
         bundle_openclaw = self._get_bundle_path('openclaw')
+        print(f"📁 离线包路径: {bundle_openclaw}")
+        
         if bundle_openclaw:
             self.root.after(0, lambda: self.update_progress(45, "使用离线包安装 OpenClaw..."))
             try:
                 import shutil
+                import time
+                
                 npm_global_dir = os.path.expandvars(r"%APPDATA%\npm\node_modules")
                 target_dir = os.path.join(npm_global_dir, 'openclaw')
-                os.makedirs(npm_global_dir, exist_ok=True)
-                if os.path.exists(target_dir):
-                    shutil.rmtree(target_dir)
-                shutil.copytree(bundle_openclaw, target_dir)
                 
-                # 创建命令行工具（指向正确的入口文件）
+                print(f"📁 目标目录: {target_dir}")
+                
+                # 创建目录
+                self.root.after(0, lambda: self.update_progress(50, "创建目录..."))
+                os.makedirs(npm_global_dir, exist_ok=True)
+                print("✓ 目录创建完成")
+                
+                # 删除旧版本
+                if os.path.exists(target_dir):
+                    self.root.after(0, lambda: self.update_progress(52, "删除旧版本..."))
+                    print("🗑️ 正在删除旧版本...")
+                    shutil.rmtree(target_dir, ignore_errors=True)
+                    print("✓ 旧版本删除完成")
+                
+                # 复制文件
+                self.root.after(0, lambda: self.update_progress(55, "复制文件（可能需要1-2分钟）..."))
+                print("📋 正在复制文件...")
+                start_time = time.time()
+                shutil.copytree(bundle_openclaw, target_dir)
+                elapsed = time.time() - start_time
+                print(f"✓ 文件复制完成，耗时 {elapsed:.1f} 秒")
+                
+                # 创建命令行工具
+                self.root.after(0, lambda: self.update_progress(60, "创建命令行工具..."))
                 npm_dir = os.path.expandvars(r"%APPDATA%\npm")
                 cmd_file = os.path.join(npm_dir, 'openclaw.cmd')
                 node_exe = os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs", "node.exe")
@@ -1207,17 +1234,24 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                     f.write(f'''@echo off
 "{node_exe}" "{entry_file}" %*
 ''')
+                print(f"✓ 命令行工具创建完成: {cmd_file}")
                 
-                # 验证 openclaw 命令是否可用
-                import time
-                time.sleep(1)
-                result = subprocess.run([cmd_file, "--version"], capture_output=True, text=True, shell=True, timeout=10)
+                # 验证 openclaw 命令
+                self.root.after(0, lambda: self.update_progress(65, "验证安装..."))
+                print("🔍 正在验证 openclaw 命令...")
+                time.sleep(2)
+                
+                result = subprocess.run([cmd_file, "--version"], capture_output=True, text=True, shell=True, timeout=30)
                 if result.returncode != 0:
                     print(f"⚠️ openclaw --version 执行失败: {result.stderr}")
                     raise Exception("openclaw 命令验证失败")
-                print(f"✓ openclaw 命令验证成功: {result.stdout.strip()}")
-                self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓ (离线)"))
-                print(f"✓ OpenClaw 离线安装成功: {target_dir}")
+                
+                version = result.stdout.strip()
+                print(f"✓ openclaw 命令验证成功: {version}")
+                
+                self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
+                print(f"✅ OpenClaw 离线安装成功！")
+                print("=" * 50)
                 return
             except Exception as e:
                 print(f"⚠️ 离线安装失败: {e}")
@@ -1225,41 +1259,6 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         # 离线包不存在，抛出错误
         raise Exception("OpenClaw 离线安装包不存在！\n请重新下载完整的安装包（约 260MB）。")
 
-        
-        self.root.after(0, lambda: self.update_progress(44, "清理旧版本残留..."))
-        subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], shell=True, capture_output=True, timeout=30)
-        subprocess.run([npm_cmd, "cache", "clean", "--force"], shell=True, capture_output=True, timeout=60)
-        
-        # 设置 npm 镜像（加速下载）
-        self.root.after(0, lambda: self.update_progress(48, "配置 npm 淘宝镜像..."))
-        subprocess.run([npm_cmd, "config", "set", "registry", "https://registry.npmmirror.com"], shell=True, capture_output=True)
-        
-        # 安装 openclaw（使用淘宝镜像）
-        self.root.after(0, lambda: self.update_progress(50, "正在下载 OpenClaw..."))
-        
-        # 多次尝试淘宝镜像
-        max_retries = 3
-        for retry in range(max_retries):
-            self.root.after(0, lambda r=retry: self.update_progress(52 + r*5, f"下载中... (尝试 {r+1}/{max_retries})"))
-            
-            result = subprocess.run(
-                [npm_cmd, "install", "-g", "openclaw", "--registry", "https://registry.npmmirror.com"],
-                capture_output=True, text=True, shell=True, timeout=300
-            )
-            
-            if result.returncode == 0:
-                break
-            
-            if retry < max_retries - 1:
-                self.root.after(0, lambda: self.update_progress(55, "下载失败，重试中..."))
-                import time
-                time.sleep(3)
-        
-        if result.returncode != 0:
-            raise Exception("OpenClaw 离线安装失败！\n请重新下载完整的安装包（约 260MB）。")
-        
-        self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
-    
     def configure_api_key(self):
         """配置 API Key 和模型（彻底修复版）"""
         provider_id = self.provider.get()

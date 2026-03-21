@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime
 
 # ============= 配置 =============
-VERSION = "3.5.0"
+VERSION = "3.5.1"
 VERIFY_SERVER = "http://180.76.100.92:5000/api/verify"
 DEFAULT_PORT = 18789  # OpenClaw 默认端口
 MIN_DISK_SPACE_GB = 5
@@ -707,7 +707,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         # Token 会动态更新
         self.finish_token = ""
         ttk.Label(info_frame, text="访问地址：", font=(FONT_FAMILY, 11)).pack(anchor='w')
-        self.access_url = ttk.Label(info_frame, text="http://127.0.0.1:18789/#token=...", font=(FONT_FAMILY, 12, 'bold'), foreground='blue')
+        self.access_url = ttk.Label(info_frame, text="http://127.0.0.1:18789/__openclaw__/webchat/", font=(FONT_FAMILY, 12, 'bold'), foreground='blue')
         self.access_url.pack(anchor='w', pady=5)
         
         # 复制按钮
@@ -719,7 +719,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
         # 重要提示
         ttk.Label(info_frame, text="⚠️ 注意：", font=(FONT_FAMILY, 10, 'bold'), foreground='orange').pack(anchor='w')
         ttk.Label(info_frame, text="直接访问 http://localhost:18789/ 会提示'拒绝连接'", font=(FONT_FAMILY, 10)).pack(anchor='w')
-        ttk.Label(info_frame, text="这是 OpenClaw 的安全机制，请务必使用上面带 #token= 的完整地址", font=(FONT_FAMILY, 10)).pack(anchor='w')
+        ttk.Label(info_frame, text="点击上方链接可直接访问 OpenClaw WebChat 界面", font=(FONT_FAMILY, 10)).pack(anchor='w')
         
         ttk.Label(info_frame, text="", font=(FONT_FAMILY, 8)).pack()  # 空行
         
@@ -735,13 +735,10 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
     
     def copy_access_url(self):
         """复制访问链接到剪贴板"""
-        if self.finish_token:
-            url = f"http://127.0.0.1:18789/#token={self.finish_token}"
-            self.root.clipboard_clear()
-            self.root.clipboard_append(url)
-            messagebox.showinfo("提示", "链接已复制到剪贴板！")
-        else:
-            messagebox.showwarning("提示", "Token 未获取，请稍后再试")
+        url = f"http://127.0.0.1:{DEFAULT_PORT}/__openclaw__/webchat/"
+        self.root.clipboard_clear()
+        self.root.clipboard_append(url)
+        messagebox.showinfo("提示", "链接已复制到剪贴板！")
     
     def create_error_page(self):
         """创建错误页面"""
@@ -1107,32 +1104,10 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 print(f"✓ Node.js 离线安装成功: {target_dir}")
                 return
             except Exception as e:
-                print(f"⚠️ 离线安装失败: {e}，尝试在线安装...")
+                print(f"⚠️ 离线安装失败: {e}")
         
-        # ===== 在线安装 =====
-        self.root.after(0, lambda: self.update_progress(16, "正在下载 Node.js v22..."))
-        nodejs_mirrors = [
-            "https://npmmirror.com/mirrors/node/v22.14.0/node-v22.14.0-x64.msi",
-            "https://mirrors.cloud.tencent.com/nodejs/v22.14.0/node-v22.14.0-x64.msi"
-        ]
-        
-        installer_path = os.path.join(os.environ.get("TEMP", "."), "nodejs_installer.msi")
-        
-        for url in nodejs_mirrors:
-            try:
-                download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
-                subprocess.run(download_cmd, shell=True, check=True, timeout=120)
-                
-                if os.path.exists(installer_path) and os.path.getsize(installer_path) > 20000000:
-                    self.root.after(0, lambda: self.update_progress(20, "正在安装 Node.js..."))
-                    # 静默安装
-                    subprocess.run(f'msiexec /i "{installer_path}" /quiet /norestart', shell=True, check=True, timeout=300)
-                    self.root.after(0, lambda: self.update_progress(25, "Node.js 安装完成 ✓"))
-                    return
-            except Exception as e:
-                continue
-        
-        raise Exception("Node.js 安装失败，请手动安装 v22 或更高版本")
+        # 离线包不存在，抛出错误
+        raise Exception("Node.js 离线安装包不存在！\n请重新下载完整的安装包（约 260MB）。")
     
     def _add_to_path(self, path_to_add):
         """添加路径到系统 PATH"""
@@ -1175,45 +1150,10 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 print(f"✓ Git 离线安装成功: {target_dir}")
                 return
             except Exception as e:
-                print(f"⚠️ 离线安装失败: {e}，尝试在线安装...")
+                print(f"⚠️ 离线安装失败: {e}")
         
-        # ===== 在线安装 =====
-        self.root.after(0, lambda: self.update_progress(30, "正在安装 Git..."))
-        try:
-            result = subprocess.run(
-                ["winget", "install", "Git.Git", "--accept-source-agreements", "--accept-package-agreements"],
-                shell=True, capture_output=True, text=True, timeout=180
-            )
-            if result.returncode == 0:
-                self.root.after(0, lambda: self.update_progress(35, "Git 安装完成 ✓"))
-                return
-        except:
-            pass
-        
-        # 下载安装包
-        self.root.after(0, lambda: self.update_progress(31, "正在下载 Git 安装包..."))
-        git_mirrors = [
-            "https://npmmirror.com/mirrors/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe",
-            "https://mirrors.cloud.tencent.com/git-for-windows/v2.49.0.windows.1/Git-2.49.0-64-bit.exe"
-        ]
-        
-        installer_path = os.path.join(os.environ.get("TEMP", "."), "git_installer.exe")
-        
-        for url in git_mirrors:
-            try:
-                download_cmd = f'powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri \'{url}\' -OutFile \'{installer_path}\' -UseBasicParsing"'
-                subprocess.run(download_cmd, shell=True, check=True, timeout=120)
-                
-                if os.path.exists(installer_path) and os.path.getsize(installer_path) > 10000000:
-                    self.root.after(0, lambda: self.update_progress(33, "正在安装 Git..."))
-                    # 静默安装
-                    subprocess.run(f'"{installer_path}" /VERYSILENT /NORESTART', shell=True, check=True, timeout=300)
-                    self.root.after(0, lambda: self.update_progress(35, "Git 安装完成 ✓"))
-                    return
-            except Exception as e:
-                continue
-        
-        raise Exception("Git 安装失败，请手动安装")
+        # 离线包不存在，抛出错误
+        raise Exception("Git 离线安装包不存在！\n请重新下载完整的安装包（约 260MB）。")
     
     def install_openclaw(self):
         """安装 OpenClaw（优先离线安装）"""
@@ -1280,28 +1220,11 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 print(f"✓ OpenClaw 离线安装成功: {target_dir}")
                 return
             except Exception as e:
-                print(f"⚠️ 离线安装失败: {e}，尝试在线安装...")
+                print(f"⚠️ 离线安装失败: {e}")
         
-        # ===== 在线安装 =====
-        # 查找 npm
-        npm_paths = [
-            os.path.join(os.environ.get("ProgramFiles", "C:\\Program Files"), "nodejs", "npm.cmd"),
-            os.path.expandvars(r"%APPDATA%\npm\npm.cmd"),
-            "npm"
-        ]
-        
-        npm_cmd = None
-        for path in npm_paths:
-            try:
-                result = subprocess.run([path, "--version"], capture_output=True, text=True, shell=True, timeout=5)
-                if result.returncode == 0:
-                    npm_cmd = path
-                    break
-            except:
-                continue
-        
-        if not npm_cmd:
-            raise Exception("找不到 npm，请确保 Node.js 已正确安装")
+        # 离线包不存在，抛出错误
+        raise Exception("OpenClaw 离线安装包不存在！\n请重新下载完整的安装包（约 260MB）。")
+
         
         self.root.after(0, lambda: self.update_progress(44, "清理旧版本残留..."))
         subprocess.run([npm_cmd, "uninstall", "-g", "openclaw"], shell=True, capture_output=True, timeout=30)
@@ -1333,7 +1256,7 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
                 time.sleep(3)
         
         if result.returncode != 0:
-            raise Exception(f"OpenClaw 下载失败。请手动执行：\nnpm install -g openclaw --registry https://registry.npmmirror.com")
+            raise Exception("OpenClaw 离线安装失败！\n请重新下载完整的安装包（约 260MB）。")
         
         self.root.after(0, lambda: self.update_progress(70, "OpenClaw 安装完成 ✓"))
     
@@ -1455,11 +1378,10 @@ OpenClaw 是您的专属 AI 助手，可本地运行，
             if not openclaw_cmd:
                 error_msg = """OpenClaw 命令不可用！
 
-请尝试以下步骤：
-1. 打开新的 CMD 窗口（以管理员身份运行）
-2. 执行: npm install -g openclaw --force --registry https://registry.npmmirror.com
-3. 验证: openclaw --version
-4. 重新运行安装程序"""
+OpenClaw 命令不可用！
+
+请重新下载完整的离线安装包（约 260MB），
+确保安装包内包含 Node.js、Git 和 OpenClaw 的离线文件。"""
                 self.root.after(0, lambda: self.show_error(error_msg))
                 raise Exception("openclaw 命令不可用，请手动安装")
             
